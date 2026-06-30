@@ -5,8 +5,9 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** Phase 1 — **M1** (the real trust core) built and self-verified,
-awaiting confirmation. Next: **M2** (tile serving + anchoring + proof bundle).
+**Current phase:** Phase 1 — **M1** confirmed; **M2a** (the self-verifying proof
+bundle) built and self-verified, awaiting confirmation. Next: **M2b** (external
+anchoring), then **M2c** (tile serving).
 
 ### State of the tree
 
@@ -17,15 +18,52 @@ awaiting confirmation. Next: **M2** (tile serving + anchoring + proof bundle).
 | Records / taxonomy | `src/druid/models.py` | ✅ `Observation`, `DiffRecord`, `DiffType` |
 | **Trust core (Rust)** | `rust/ledger-core/` | ✅ tlog Merkle log + signed checkpoints + inclusion/consistency proofs + `druid-verify` |
 | Ledger front end | `src/druid/ledger/core.py` | ✅ shells out to `druid-ledger`/`druid-verify` (no FFI) |
+| Proof bundle | `pipeline.bundle` + `verify_bundle` (Rust) | ✅ `druid.proofbundle/v1`, offline-verified (M2a) |
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
 | Differ L0 / L1 | `src/druid/differ/` | ✅ normalise + term-watch |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
-| CLI | `src/druid/cli.py` | ✅ `targets` / `observe` / `log` / `verify` |
+| CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`bundle`/`verify-bundle` |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
 
 ---
 
-## M1 — Real trust core (Rust ledger-core + offline verifier) · built 2026-06-30 (awaiting test)
+## M2a — Self-verifying proof bundle · built 2026-06-30 (awaiting test)
+
+The "citable" artifact: a single file anyone can verify offline, trusting neither the
+government nor Druid. Builds directly on M1's `offline_verify`.
+
+**What shipped.** `druid bundle <target> [--index N] [-o file]` assembles a
+`druid.proofbundle/v1` — a self-contained JSON holding the observation record, the raw
+response bytes (base64-inlined as an artifact), the Merkle inclusion proof, the signed
+checkpoint, and the pinned public key. `druid-verify bundle <file>` (new Rust subcommand
+on `ledger_core::verify_bundle`) validates it **fully offline**: each artifact's bytes
+hash to the observation's `raw_bytes_hash`, the leaf bytes hash to the claimed leaf hash,
+and the leaf is included under a validly-signed checkpoint (reusing `verify_inclusion`).
+`druid verify-bundle <file>` is the Python convenience wrapper. The bundle is a single
+file by design (artifacts inlined) so it stays dependency-light — no zip/sidecar handling
+in the verifier yet.
+
+**Key decisions.** (1) Single self-contained JSON with inlined artifact bytes (not a zip)
+— keeps the open verifier tiny (only `serde_json`), fine for HTML/text observations;
+datasets will want sidecar/zip later. (2) The `anchors` array is present but empty —
+external-anchor verification is **M2b**, so the bundle proves *inclusion under a signed
+checkpoint*, not yet *existed-no-later-than* (don't overclaim). (3) Tile-file serving is
+**M2c**.
+
+**Verified.** `cargo test` 7/7 (+ the existing suite, `verify_bundle` exercised via
+Python), `clippy -D warnings` + `fmt` clean. Python: `ruff` + `mypy` clean, `pytest`
+**11/11** (+2: bundle verifies offline; tampered bundle rejected). Live: `bundle
+epa-ghgrp` → an 84 KB proof.json; `verify-bundle` → `VALID … included offline`; flip a
+byte → `INVALID artifact bytes do not hash to …`.
+
+**Gotcha fixed.** The CLI success line used a `→` (U+2192), which **crashes** on Windows
+when stdout is piped (cp1252 can't encode it) — caught in the live run, replaced with
+ASCII `->`. Reinforces the standing rule: keep CLI output ASCII (the em dash/ellipsis in
+`observe`/`verify` are cp1252-safe; arrows are not).
+
+---
+
+## M1 — Real trust core (Rust ledger-core + offline verifier) · built 2026-06-30 (✓ confirmed)
 
 The M0 hash chain is gone; the ledger is now a genuine Merkle transparency log with an
 independent offline verifier — the project's engineering pillar #1.
