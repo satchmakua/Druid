@@ -5,8 +5,8 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** Phase 0 done (**M0** walking skeleton). Next: **M1** — the Rust
-tile-based Merkle log + offline verifier.
+**Current phase:** Phase 1 — **M1** (the real trust core) built and self-verified,
+awaiting confirmation. Next: **M2** (tile serving + anchoring + proof bundle).
 
 ### State of the tree
 
@@ -15,14 +15,55 @@ tile-based Merkle log + offline verifier.
 | Content addressing | `src/druid/hashing.py` | ✅ sha2-256 multihash + verify |
 | Blob store | `src/druid/store.py` | ✅ filesystem, content-addressed, sharded, dedups |
 | Records / taxonomy | `src/druid/models.py` | ✅ `Observation`, `DiffRecord`, `DiffType` |
-| Ledger (trust core) | `src/druid/ledger/log.py` | ✅ M0 signed hash-chain + `verify()` — **placeholder for M1 tile log** |
-| Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher`, WARC-less M0 |
+| **Trust core (Rust)** | `rust/ledger-core/` | ✅ tlog Merkle log + signed checkpoints + inclusion/consistency proofs + `druid-verify` |
+| Ledger front end | `src/druid/ledger/core.py` | ✅ shells out to `druid-ledger`/`druid-verify` (no FFI) |
+| Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
 | Differ L0 / L1 | `src/druid/differ/` | ✅ normalise + term-watch |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
 | CLI | `src/druid/cli.py` | ✅ `targets` / `observe` / `log` / `verify` |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
 
 ---
+
+## M1 — Real trust core (Rust ledger-core + offline verifier) · built 2026-06-30 (awaiting test)
+
+The M0 hash chain is gone; the ledger is now a genuine Merkle transparency log with an
+independent offline verifier — the project's engineering pillar #1.
+
+**What shipped.** A Rust workspace at `rust/` with the `ledger-core` crate (built on the
+Cloudflare `tlog_tiles` v0.2 crate — the C2SP tlog algorithms ported from Go's
+`sumdb/tlog`) and two binaries. `druid-ledger` appends a leaf (`record_hash` =
+SHA-256(0x00‖bytes), RFC 6962), maintains the canonical stored-hash file, and writes a
+**C2SP signed checkpoint** (a signed note: body + blank line + `— name base64(keyID‖sig)`,
+Ed25519, key ID = SHA-256(name‖0x0A‖0x01‖pubkey)[:4] — implemented from the C2SP
+signed-note spec and unit-tested). It also produces **inclusion** and **consistency**
+proofs. `druid-verify` has two modes: `log` (recompute the whole tree and check it
+against the signed checkpoint — catches tampering of a stored leaf *or* a stored hash)
+and `inclusion` (verify a record against a checkpoint **fully offline**, no directory,
+no live service — the seed of the M2 proof bundle). Python's `ledger/core.py` owns
+canonicalisation and shells out over stdio.
+
+**Key decisions.** (1) Built on `tlog_tiles` rather than hand-rolling Merkle crypto
+(no bespoke crypto — CLAUDE.md). (2) Backed by the canonical flat **stored-hash file**;
+the literal HTTP **tile-file serialization** (R2/CDN) is deferred to M2, where fetching
+tiles from the blob store is the actual need — the trust *properties* (tamper-evidence,
+offline inclusion + consistency) are fully delivered now. See ADR-0003. (3) Python↔Rust
+over stdio (no FFI) keeps the auditable kernel a small standalone binary.
+
+**Verified.** `cargo test` → **7/7** (signed-note roundtrip/wrong-key/tamper; append +
+whole-log verify; offline inclusion; consistency proof; entry-tamper detection); `cargo
+clippy -D warnings` clean; `cargo fmt` clean. Python: `ruff` + `mypy` clean, `pytest` →
+**9/9** (the 4 ledger-backed tests shell out to the real binaries, skipping if unbuilt).
+Live demo: observe an EPA page twice → `TermSubstitution` "climate change"→absent
+flagged High; `verify` → `VALID 4 entries`; `offline_verify(0)` → `VALID record 0
+included in tree size 4`; corrupt a stored leaf → `INVALID entry 0 hash mismatch`.
+
+**Gotcha for the next session.** The Rust binaries emit UTF-8 (the checkpoint's
+signature line carries a U+2014 em dash). Decode subprocess output as UTF-8 explicitly —
+`subprocess(text=True)` uses the Windows locale (cp1252) and silently corrupts the note,
+which a unit test caught. The trust kernel must be built before the pipeline runs:
+`cargo build --release --manifest-path rust/Cargo.toml`. `Cargo.lock` is committed
+(reproducible binaries); `rust/target/` is ignored.
 
 ## M0 — Walking skeleton · built 2026-06-30 (✓ verified at scaffold)
 
