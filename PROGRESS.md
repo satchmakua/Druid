@@ -5,9 +5,10 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** Phase 1 — **M1** confirmed; **M2a** (the self-verifying proof
-bundle) built and self-verified, awaiting confirmation. Next: **M2b** (external
-anchoring), then **M2c** (tile serving).
+**Current phase:** Phase 1 — **M1** confirmed; **M2a** (proof bundle), **M2b-1**
+(RFC 3161 offline verifier), **M2b-2** (independent third-party TSAs) built and
+self-verified, awaiting confirmation. Next: **M2b-3** (OpenTimestamps), **M2c**
+(tile serving).
 
 ### State of the tree
 
@@ -19,11 +20,95 @@ anchoring), then **M2c** (tile serving).
 | **Trust core (Rust)** | `rust/ledger-core/` | ✅ tlog Merkle log + signed checkpoints + inclusion/consistency proofs + `druid-verify` |
 | Ledger front end | `src/druid/ledger/core.py` | ✅ shells out to `druid-ledger`/`druid-verify` (no FFI) |
 | Proof bundle | `pipeline.bundle` + `verify_bundle` (Rust) | ✅ `druid.proofbundle/v1`, offline-verified (M2a) |
+| RFC 3161 anchoring | `rust/…/rfc3161.rs`, `src/druid/anchors.py` | ✅ offline verify (RSA/ECDSA P-256/384/521), real DigiCert+FreeTSA TSAs, pinned roots (M2b-1/2) |
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
 | Differ L0 / L1 | `src/druid/differ/` | ✅ normalise + term-watch |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
 | CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`bundle`/`verify-bundle` |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M2b-2 — Independent third-party TSAs · built 2026-07-01 (awaiting test)
+
+The step that makes the time bound *real*: anchor against independent operators Druid
+doesn't control, and ship their roots pinned so anchors verify offline by default.
+
+**What shipped.** `HttpTsaAnchorer` submits an RFC 3161 query over HTTP (polite UA,
+bounded timeout) to real TSAs; `druid anchor --tsa digicert,freetsa` anchors the current
+checkpoint against both (best-effort, per-TSA failures reported). The Rust verifier now
+**embeds the DigiCert + FreeTSA roots** (`rust/ledger-core/roots/*.crt`, `include_str!`),
+so `druid verify-bundle` checks those anchors with no `--root`; `--root` still adds extras
+(e.g. the self-hosted dev TSA). `verify_bundle` reports the tightest bound — the earliest
+genTime across all verified anchors.
+
+**Real-world hardening (the crux).** Verifying *real* production tokens surfaced two bugs
+the self-signed fixture never would:
+- **Digest ≠ curve.** FreeTSA signs with an **ECDSA P-384 key and SHA-512** (`ecdsa-with-
+  SHA512`). I had derived the curve from the signature digest (SHA-512 ⇒ P-521) — wrong.
+  Now the curve is read from the key's SPKI and verification uses a **prehash** (ECDSA
+  reduces the SHA-512 hash to the P-384 field). Added `p521` for genuine P-521 too.
+- **Signer digest ≠ SHA-256.** FreeTSA's SignerInfo digest is SHA-512; the messageDigest
+  cross-check now uses `SignerInfo.digestAlgorithm`, not a hardcoded SHA-256.
+DigiCert (RSA-4096, 3-cert chain, cross-signed root) worked first try and exercises the
+chain walk.
+
+**Verified.** `cargo test` → 15 (rfc3161 now 8, incl. **committed real DigiCert + FreeTSA
+tokens** that verify against their pinned roots and are each rejected under the other's
+root — the independence property). `clippy -D warnings` + `fmt` clean. Python: `ruff` +
+`mypy` clean, `pytest` → **14** (+1 live DigiCert test, network-gated, skips offline).
+Live: `anchor --tsa digicert,freetsa` → 2 tokens; `verify-bundle` (no `--root`) → `VALID
+… 2 anchor(s) verified - existed no later than 2026-07-02T10:18:14Z`.
+
+**Fixtures/roots are public-only** (tokens + root **.crt** certs, no keys) so the
+`/commit` secret-scan stays quiet; the dev-TSA keys remain in gitignored `druid-data/`.
+
+---
+
+## M2b-1 — RFC 3161 anchor + offline verifier · built 2026-07-01 (awaiting test)
+
+Anchors bind a checkpoint to a *time*, so the bundle can (eventually) claim "existed no
+later than T". This slice delivers the genuinely-hard, correctness-critical half: a
+from-scratch **offline RFC 3161 verifier in Rust**, proven against real openssl-minted
+tokens. Preceded by a research workflow (fan-out + adversarial verification) that pinned
+the exact crate stack and caught a would-be compile bug before any code.
+
+**What shipped.** `rust/ledger-core/src/rfc3161.rs` — `verify_rfc3161_token(token, hash,
+roots)` parses the CMS `SignedData`, extracts the `TSTInfo` (via the `x509-tsp` crate),
+and offline-verifies: (1) the token's messageImprint == the anchored hash; (2) the
+signed-attribute cross-checks (messageDigest == hash(eContent), contentType ==
+id-ct-TSTInfo); (3) the TSA signature over the DER `SET OF` signed attributes (RSA
+PKCS#1v1.5 / ECDSA, dispatched by alg OID, handling the `rsaEncryption`-with-separate-
+digest form openssl emits); (4) the signer's `id-kp-timeStamping` EKU; (5) a signature
+chain to a **pinned** root; (6) genTime within the signer's validity window. Wired into
+`verify_bundle(json, roots)` — anchors are checked against `sha256(checkpoint)`; a pinned
+anchor that fails is a hard error, anchors with no pinned root are reported UNCHECKED (the
+inclusion proof stands alone). Python: an `anchors.py` port with `OpensslTsaAnchorer`
+(a self-hosted TSA), `Druid.anchor()`, bundle embedding, and CLI `druid anchor` /
+`druid verify-bundle --root`.
+
+**Key decisions.** (1) **der-0.7 RustCrypto generation** (cms 0.2.3, x509-cert 0.2.5,
+x509-tsp 0.1, rsa 0.9.10, ecdsa 0.16.9) — cms/x509-cert have no stable 0.3 yet; a
+`TODO(der-0.8)` marks the future migration. No dedicated end-to-end RFC 3161 verify crate
+exists, so ~230 lines assembled on audited primitives (no bespoke crypto). (2) **Pinned-
+root** verification, not full RFC 5280 path validation (no revocation/name-constraints) —
+honest limit for a small pinned TSA set (ADR-0004). (3) **Self-hosted dev TSA** ships so
+anchoring works offline now, but it is **not independent** — Druid holds its key, so it's
+no defence against Adversary B. Independent third-party TSAs are M2b-2; the code and copy
+say so and don't overclaim a real time bound yet. Keys live in gitignored `druid-data/`
+(no committed secret — the `/commit` secret-scan would flag one).
+
+**Verified.** `cargo test` → 11 (incl. 4 new `rfc3161_test` against real openssl tokens:
+valid verifies + reports genTime, wrong-hash/tamper/untrusted-root each rejected for its
+specific reason), `clippy -D warnings` + `fmt` clean. Python: `ruff` + `mypy` clean,
+`pytest` → **13** (+2 anchoring: anchor→bundle→verify offline, and wrong-root rejection —
+both fully offline via the openssl dev TSA, skipped if openssl/kernel absent). Live:
+`observe → anchor → bundle → verify-bundle --root` → `VALID … anchored no later than
+2026-07-02T04:12:31Z`; without `--root` → core VALID + "anchor UNCHECKED"; tamper → INVALID.
+
+**Fixtures.** `tests/fixtures/rfc3161/` holds a committed self-issued TSA **root cert +
+tokens** (public only, no keys) minted with `openssl ts`. The Python tests generate an
+ephemeral dev TSA at runtime (openssl), so nothing secret is committed.
 
 ---
 
