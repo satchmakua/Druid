@@ -5,12 +5,13 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** trust spine (M0–M2b-2) + detection (L0/L1/L2/L4) + the public ship
-(**M5a** record/RSS, **M5b** in-browser WASM verifier) — Druid is browsable, subscribable,
-and independently verifiable in a browser. Built + awaiting confirmation: M2a, M2b-1,
-M2b-2, M3a, M4a, M5a, M5b. Queued: **M5c** (webhook/email alerts + client-side search),
-**M2b-3** (OpenTimestamps — deferred), **M2c** (tile serving), **M3b** (render collector),
-**M4b** (NetCDF/xarray).
+**Current phase:** **the public ship (M5) is complete** — record + RSS (M5a), in-browser
+WASM verifier (M5b), and push alerts + search (M5c) — on a provable trust spine (M0–M2b-2)
+with four-layer detection (L0/L1/L2/L4). Druid is browsable, subscribable, independently
+verifiable in a browser, and pushes alerts. Built + awaiting confirmation: M2a, M2b-1,
+M2b-2, M3a, M4a, M5a, M5b, M5c. Queued (breadth/depth): **M2b-3** (OpenTimestamps —
+deferred), **M2c** (tile serving), **M3b** (render collector), **M4b** (NetCDF/xarray),
+**M6** (embedding/LLM triage), **M7** (federated overlay), **M8** (witness cosigning).
 
 ### State of the tree
 
@@ -29,7 +30,33 @@ M2b-2, M3a, M4a, M5a, M5b. Queued: **M5c** (webhook/email alerts + client-side s
 | CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`anchor`/`bundle`/`verify-bundle`/`export` |
 | Public record + feeds | `src/druid/web/`, `web/` (Astro) | ✅ `record.json` + RSS + a browsable static site (M5a) |
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
+| Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M5c — Push alerts + client-side search · built 2026-07-03 (awaiting test)
+
+Closes out the public ship: the record now *pushes* to subscribers and is searchable.
+
+**What shipped.** `src/druid/notify.py` — data-driven **subscriptions**
+(`data/subscriptions.toml`: `channel` webhook|email, `dest`, `min_severity`, optional
+`targets`/`diff_types`), `matches()` filtering, and `dispatch()` that sends each new
+matching diff event over an injectable **webhook** (`HttpWebhookNotifier`, POSTs a
+`druid.alert/v1` payload) or **email** (`SmtpEmailNotifier`, builds an `EmailMessage`).
+Delivery is **idempotent**: a per-`{subscription}:{event}` key is persisted in
+`druid-data/notify-state.json`, so re-runs never re-send, a *new* subscription still gets
+its historical events, and only successful sends are marked (failures retry). CLI
+`druid notify [--dry-run] [--smtp-host/-port/--email-from]`. The Astro home page gains a
+**client-side search** island filtering the change list (by target/type/severity/value).
+
+**Verified.** `ruff` + `mypy` clean; `pytest` → **34** (+7 notify: severity/target/type
+matching; dispatch is idempotent; a failed delivery isn't marked + retries; webhook posts
+the alert payload; email message built + sent via an injected sender; repo subscriptions
+load). Live: `notify --dry-run` on a High 10→15 ppb change lists 2 matching webhook subs
+(the email sub is correctly filtered out by its target list). Site: `npm run build` → 8
+pages; a headless eval confirmed search filters "numeric"→1, "epa-ghgrp"→3, no-match→0 +
+a "no results" message, reset→all; no console errors.
 
 ---
 
