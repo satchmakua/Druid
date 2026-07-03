@@ -5,10 +5,11 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** trust spine (M0–M2b-2) done; deepening detection. **M3a** (L2 numeric)
-and **M4a** (L4 tabular dataset diff) built and self-verified. Built + awaiting
-confirmation: M2a, M2b-1, M2b-2, M3a, M4a. Queued: **M2b-3** (OpenTimestamps — deferred:
-needs Bitcoin-confirmation latency), **M2c** (tile serving), **M3b** (render collector),
+**Current phase:** trust spine (M0–M2b-2) + detection (L0/L1/L2/L4) + the public ship
+(**M5a** record/RSS, **M5b** in-browser WASM verifier) — Druid is browsable, subscribable,
+and independently verifiable in a browser. Built + awaiting confirmation: M2a, M2b-1,
+M2b-2, M3a, M4a, M5a, M5b. Queued: **M5c** (webhook/email alerts + client-side search),
+**M2b-3** (OpenTimestamps — deferred), **M2c** (tile serving), **M3b** (render collector),
 **M4b** (NetCDF/xarray).
 
 ### State of the tree
@@ -25,8 +26,74 @@ needs Bitcoin-confirmation latency), **M2c** (tile serving), **M3b** (render col
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
 | Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + dataset schema/distributional (M4a) |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
-| CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`bundle`/`verify-bundle` |
+| CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`anchor`/`bundle`/`verify-bundle`/`export` |
+| Public record + feeds | `src/druid/web/`, `web/` (Astro) | ✅ `record.json` + RSS + a browsable static site (M5a) |
+| In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M5b — In-browser WASM verifier · built 2026-07-02 (awaiting test)
+
+The headline demo of Druid's whole thesis: **anyone verifies the record offline, in a
+browser, trusting no one.** The proof is transferable and doesn't route through Druid.
+
+**What shipped.** A new `rust/ledger-wasm` crate (cdylib, wasm-bindgen) exposes
+`verify_bundle(json) -> String` and compiles `ledger-core` to `wasm32-unknown-unknown`
+(the whole crypto stack — cms/x509/rsa/ecdsa/p256-384-521/ed25519/tlog_tiles — is pure
+Rust, so it compiles cleanly; `getrandom` gets its `js` backend via a wasm-target dep). It
+ships the same pinned DigiCert/FreeTSA roots (`include_str!`), so real-TSA-anchored bundles
+verify with nothing extra. `npm run build:wasm` runs `cargo build --target wasm32` +
+`wasm-bindgen --target web` into `web/public/wasm/`. A `/verify` Astro page (inline module
+island) loads the WASM and verifies a chosen `proof.json` — green check / red cross,
+nothing uploaded. Linked from the home hero and every event permalink.
+
+**Verified.** In a real browser (astro dev + preview): the page shows "Verifier ready
+(runs offline in your browser)"; a headless eval loaded the WASM, fetched the committed
+`sample-proof.json` (a real DigiCert-anchored EPA bundle) and got `VALID … included offline`
+(+ time bound), and a tampered-artifact variant got `INVALID artifact bytes do not hash to
+…` — **byte-for-byte the same verdicts as the native `druid-verify`**. Adding the wasm
+crate to the workspace left the native build/tests green: `cargo build --release` OK,
+`cargo test` 15, clippy/fmt clean; Python `pytest` 27 unchanged.
+
+**Toolchain/notes.** Needs `rustup target add wasm32-unknown-unknown` + `wasm-bindgen-cli`
+(pinned to the crate's 0.2.126). The generated `web/public/wasm/` (a ~1.2 MB unoptimised
+wasm) is **gitignored** and rebuilt via `build:wasm`; a production deploy would `wasm-opt`
+it. `sample-proof.json` is committed (public, ~92 KB) so `/verify` has something to check.
+Client-side search + webhook/email push are M5c.
+
+---
+
+## M5a — Public record (Astro) + RSS feeds · built 2026-07-02 (awaiting test)
+
+The public ship, first slice: make the record **browsable and subscribable**. Trust spine
+solid + detection across four layers, so now it becomes *citable*.
+
+**What shipped.** `src/druid/web/` builds the public record from the ledger:
+`build_record` → a `druid.record/v1` JSON (per-target timelines of attested observations +
+classified diff events, each keyed by its permanent leaf hash); `feed.py` renders RSS 2.0
+(stdlib ElementTree — well-formed, no dep) globally and per target; `druid export --out
+<dir>` writes `record.json` + `feed.xml` + `feeds/<id>.xml`. A minimal **Astro 6** site
+(`web/`, static) renders it: a home page (recent changes with severity badges + a targets
+grid), per-target timelines (observations interleaved with diffs + evidence), and
+per-event permalink pages — each carrying the integrity/interpretation boundary in copy
+("severity labels are best-effort, human-reviewable, never a verified fact"). This
+realises DESIGN §3's Astro choice (read-heavy/static). Data flow: `druid export --out
+web/public` + copy `record.json` to `web/src/data/` (the `web` npm `export` script), then
+`astro build`.
+
+**Verified.** `ruff` + `mypy` clean; `pytest` → **27** (+3 web: record has targets/
+observations/events with 64-hex leaf-hash ids; RSS is well-formed with one item per event;
+export writes record.json + feeds). `cd web && npm install && npm run build` → **7 static
+pages** (index + 2 targets + 4 events). Preview (astro dev): home + target pages render the
+classified changes (TermSubstitution, NumericThresholdChange 10→15 ppb) with badges,
+evidence, and permalinks; **no console errors**.
+
+**Notes.** `web/node_modules`, `web/dist`, `web/.astro`, `site-data/` are gitignored;
+`web/src/data/record.json` + `web/public/feed.xml` are committed as **sample** data so the
+site builds standalone (production regenerates them via `druid export`). Arrows/em-dashes
+in the *site* HTML are fine (UTF-8) — the ASCII rule is only for CLI stdout. WASM in-browser
+verify + search (M5b) and webhook/email push (M5c) are next.
 
 ---
 
