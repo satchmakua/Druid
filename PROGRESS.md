@@ -5,10 +5,11 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** Phase 1 — **M1** confirmed; **M2a** (proof bundle), **M2b-1**
-(RFC 3161 offline verifier), **M2b-2** (independent third-party TSAs) built and
-self-verified, awaiting confirmation. Next: **M2b-3** (OpenTimestamps), **M2c**
-(tile serving).
+**Current phase:** trust spine (M0–M2b-2) done; deepening detection. **M3a** (L2 numeric)
+and **M4a** (L4 tabular dataset diff) built and self-verified. Built + awaiting
+confirmation: M2a, M2b-1, M2b-2, M3a, M4a. Queued: **M2b-3** (OpenTimestamps — deferred:
+needs Bitcoin-confirmation latency), **M2c** (tile serving), **M3b** (render collector),
+**M4b** (NetCDF/xarray).
 
 ### State of the tree
 
@@ -22,10 +23,66 @@ self-verified, awaiting confirmation. Next: **M2b-3** (OpenTimestamps), **M2c**
 | Proof bundle | `pipeline.bundle` + `verify_bundle` (Rust) | ✅ `druid.proofbundle/v1`, offline-verified (M2a) |
 | RFC 3161 anchoring | `rust/…/rfc3161.rs`, `src/druid/anchors.py` | ✅ offline verify (RSA/ECDSA P-256/384/521), real DigiCert+FreeTSA TSAs, pinned roots (M2b-1/2) |
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
-| Differ L0 / L1 | `src/druid/differ/` | ✅ normalise + term-watch |
+| Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + dataset schema/distributional (M4a) |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
 | CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`bundle`/`verify-bundle` |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M4a — L4 tabular dataset diffing · built 2026-07-02 (awaiting test)
+
+The other largely-novel detection capability (DESIGN §6.2): catch *silent dataset
+manipulation* — a column quietly dropped, a series re-baselined, a record set truncated.
+
+**What shipped.** A `dataset`-kind target (new `Target.kind`, from `targets.toml`) routes
+the pipeline differ to `differ/dataset.py` (pandas) instead of the text layers.
+`dataset_diff` parses CSV/TSV/JSON and emits: `SchemaChange` for a column added
+(Medium) / removed (High) / retyped (Medium); `DistributionalShift [High]` when a numeric
+column's mean/min/max moves (re-baselining/scaling) or the row count changes (truncation),
+with before/after stats as evidence. Distributional checks run only on numeric columns —
+string columns get schema checks only — which keeps it high-precision. Added `pandas>=2.2`
+(installed 3.0.3 + numpy 2.4.6); the through-line to `xarray` for M4b (NetCDF).
+
+**Verified.** `ruff` + `mypy` clean; `pytest` → **24** (+6 dataset: column-removed →
+SchemaChange High; re-baselined series → DistributionalShift; truncation → row_count
+shift; identical → no diffs; JSON-records parse; pipeline routes dataset targets to L4).
+Live: a NOAA-style CO2 CSV with methane dropped + CO2 re-baselined -3 ppm + a row truncated
+→ `SchemaChange [High] (methane_ppb removed)` + `DistributionalShift [High]` on co2_ppm
+(mean 414.2 → 410.4) + `row_count 3 → 2`.
+
+**Notes for next time.** Truncation shifts an index-like column's stats too (e.g. `year`),
+so it also fires a per-column DistributionalShift — correct, not a false positive, but a
+future refinement could tag index columns. `.zip`/`.xlsx`/NetCDF aren't parsed yet (they
+yield a `MetadataChange "could not parse"`); that's M4b. The seeded `epa-ghgrp-data` target
+points at a `.zip`, so a live `observe` on it will note "could not parse" until M4b.
+
+---
+
+## M3a — L2 numeric / threshold extraction · built 2026-07-02 (awaiting test)
+
+With the trust spine hardened (M0–M2b-2), this deepens what Druid *catches* — the
+canonical manipulation: a regulatory number quietly edited. (Pulled ahead of M2b-3, whose
+offline time bound needs hours of Bitcoin confirmation, and M2c.)
+
+**What shipped.** `differ/numeric.py` extracts numbers-with-units that sit next to a
+regulatory keyword (threshold / limit / standard / reporting / MCL / …) with a plausible
+unit (an env-units allowlist, or any unit carrying `% / µ °`), keyed on the keyword phrase
++ unit. `numeric_watch` flags a `NumericThresholdChange [High]` when the value for the same
+context changes, with evidence `{context, unit, from, to}`. Wired into the pipeline differ
+after L1 term-watch. High-precision by design: a number with no regulatory keyword nearby,
+or a bare count/year, is ignored — no false positives on prose.
+
+**Decisions.** Regex + keyword-context + unit allowlist rather than an ML NER (dependency-
+light, high-precision, deterministic — fits the differ's "high-precision layers" intent).
+Cross-unit normalisation (`pint`: 10 ppb == 0.010 ppm) is deliberately deferred — until
+then differing units don't match, which only *misses* a re-expression, never false-fires.
+
+**Verified.** `ruff` + `mypy` clean; `pytest` → **18** (+4 numeric: extracts only near a
+keyword; flags 10→15 ppb High with from/to evidence; no flag when unchanged; ignores
+years/counts). Live: two versions of an EPA page ("reporting threshold … 10 ppb" →
+"15 ppb") → `NumericThresholdChange [High] {context: "threshold for benzene is", unit:
+"ppb", from: "10 ppb", to: "15 ppb"}`.
 
 ---
 
