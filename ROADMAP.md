@@ -1,14 +1,14 @@
 # ROADMAP — Druid
 
-The milestone checklist. Standing instruction: **"continue"** → build the next
-unchecked milestone.
+The milestone checklist. Build the next unchecked milestone in order.
 
 **Rules of the road:**
-- Each milestone is an **independently runnable** slice the human can test.
+- Each milestone is an **independently runnable** slice — something actually
+  testable end-to-end, not an internal-only refactor.
 - Every milestone ends with explicit **Test** steps — the acceptance criteria.
 - Build **top-down**: M0–M2 build and harden the trust spine; M3–M4 deepen
   detection; **M5 is the public ship**; M6–M8 are force multipliers.
-- Check a box **only after the human confirms its Test passes**, then add a
+- Check a box **only after its Test passes**, then add a
   `PROGRESS.md` entry.
 
 See [DESIGN.md §8](DESIGN.md) for the full rationale behind this arc.

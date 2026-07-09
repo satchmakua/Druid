@@ -6,7 +6,7 @@
 ## Context
 
 Significant, hard-to-reverse decisions (a framework, a data model, a boundary, a
-protocol) need a durable record of *why*, so a future session — human or AI —
+protocol) need a durable record of *why*, so a future maintainer
 doesn't relitigate them or undo them blindly. `DESIGN.md` holds the current state;
 ADRs hold the reasoning behind individual choices over time.
 
@@ -22,7 +22,7 @@ this way?" will be asked later. Don't write one for routine, easily-reversed cal
 
 ## Consequences
 
-- Decisions have a paper trail; onboarding (human or AI) is faster.
+- Decisions have a paper trail; onboarding is faster.
 - A small amount of discipline is required to write them.
 - Superseded decisions stay in the log (mark them `Superseded by ADR-NNNN`) rather
   than being deleted — the history is the point.
