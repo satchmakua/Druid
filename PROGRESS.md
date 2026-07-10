@@ -5,12 +5,11 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** **the public ship (M5) is complete and confirmed** — everything from
-M0 through M5c has passed its ROADMAP acceptance tests (confirmation pass 2026-07-10,
-below). The trust spine (M0–M2b-2), four-layer detection (L0/L1/L2/L4), and the public
-product (record + RSS, in-browser WASM verifier, push alerts + search) are all live.
-Queued (breadth/depth): **M2b-3** (OpenTimestamps — deferred), **M2c** (tile serving),
-**M3b** (render collector), **M4b** (NetCDF/xarray), **M6** (embedding/LLM triage),
+**Current phase:** **the public ship (M5) is complete and confirmed**, and the trust
+spine is now fully self-serving: **M2c** publishes the C2SP tile files so verifiers
+recompute proofs from fetched tiles alone. Everything M0–M5c + M2c has passed its
+ROADMAP acceptance tests. Queued (breadth/depth): **M3b** (render collector), **M4b**
+(NetCDF/xarray), **M2b-3** (OpenTimestamps — deferred), **M6** (embedding/LLM triage),
 **M7** (federated overlay), **M8** (witness cosigning).
 
 ### State of the tree
@@ -23,6 +22,7 @@ Queued (breadth/depth): **M2b-3** (OpenTimestamps — deferred), **M2c** (tile s
 | **Trust core (Rust)** | `rust/ledger-core/` | ✅ tlog Merkle log + signed checkpoints + inclusion/consistency proofs + `druid-verify` |
 | Ledger front end | `src/druid/ledger/core.py` | ✅ shells out to `druid-ledger`/`druid-verify` (no FFI) |
 | Proof bundle | `pipeline.bundle` + `verify_bundle` (Rust) | ✅ `druid.proofbundle/v1`, offline-verified (M2a) |
+| Tile serving | `Ledger::write_tiles` + `druid-verify tiles` | ✅ C2SP tiles published on append; proofs reconstruct from tiles alone (M2c) |
 | RFC 3161 anchoring | `rust/…/rfc3161.rs`, `src/druid/anchors.py` | ✅ offline verify (RSA/ECDSA P-256/384/521), real DigiCert+FreeTSA TSAs, pinned roots (M2b-1/2) |
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
 | Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + dataset schema/distributional (M4a) |
@@ -32,6 +32,49 @@ Queued (breadth/depth): **M2b-3** (OpenTimestamps — deferred), **M2c** (tile s
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M2c — Tile serving · built + confirmed 2026-07-10
+
+The last piece of the M2 citable-proof arc: the log itself becomes **fetchable static
+files**, so proofs no longer depend on Druid handing them out — a verifier reconstructs
+them from tiles it fetched, trusting only the checkpoint signature.
+
+**What shipped.** `Ledger::append` now publishes the C2SP tile files
+(`tile/<h>/<l>/<n>[.p/<w>]`, height 8) beside the ledger via `Tile::new_tiles` +
+`tile.read_data` from the `tlog_tiles` crate (API verified against the vendored 0.2
+source; the crate is the Go `sumdb/tlog` port, so `TileHashReader` gives authenticated
+tile fetching for free). Per the spec's MAY-delete: a wider partial prunes narrower
+ones, a completed full tile removes its `.p/` dir. `Ledger::write_tiles(0, size)` (CLI:
+`druid tiles`, binary: `druid-ledger tiles`) regenerates everything — the migration for
+pre-tile ledgers. Verification: `DirTileReader` (exact partial → full tile → wider
+partial fallback, always sliced to the requested width) + `verify_inclusion_from_tiles`
+→ `druid-verify tiles --tiles <dir>` takes the inclusion-JSON *without* a proof and
+reconstructs it from tile files alone — `TileHashReader` authenticates every tile
+against the signed root before use, so a substituted tile is caught, and trust still
+reduces to the checkpoint signature. Python: `Ledger.emit_tiles()` /
+`offline_verify_from_tiles()`; `druid export` ships `checkpoint` + a mirrored `tile/`
+into the site (committed as sample data like `record.json`), so the **static Astro site
+is now literally a C2SP-layout tile server** (`/checkpoint`, `/tile/8/0/…`) — the dev
+form of "R2/CDN-served".
+
+**Scope call.** Hash tiles only — no entry bundles yet: nothing consumes them (the
+record bytes travel inside the proof bundle), and C2SP entry-bundle framing can land
+when a consumer exists (e.g. M7 mirroring).
+
+**Verified.** `cargo test` → **20** (+5 tiles: proofs-from-tiles-alone with `hashes` +
+`entries.b64` deleted; a 600-leaf log exercising two full level-0 tiles + partials at
+two levels, incl. boundary records 255/256, with full tiles pruning their partials; a
+flipped tile byte rejected; a wrong record rejected; pre-tile regeneration), clippy/fmt
+clean, wasm target still compiles. Python: `ruff` + `mypy` clean, `pytest` → **38** (+4:
+e2e pipeline appends publish tiles + verify-from-tiles with the hash file deleted;
+tampered tile → INVALID; `emit_tiles` migration; export ships checkpoint + tiles). Live:
+`druid tiles` on the real 11-entry ledger → `tile/8/0/000.p/11`; a scratch dir holding
+**only** the fetched `tile/` tree → `VALID record 0 included in tree size 11 via tiles
+alone, root a67e1f…` (the confirmed checkpoint root); one flipped byte → `INVALID
+downloaded inconsistent tile`; `astro build` serves `dist/checkpoint` +
+`dist/tile/8/0/000.p/11`.
 
 ---
 
