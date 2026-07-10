@@ -5,13 +5,13 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** **the public ship (M5) is complete** — record + RSS (M5a), in-browser
-WASM verifier (M5b), and push alerts + search (M5c) — on a provable trust spine (M0–M2b-2)
-with four-layer detection (L0/L1/L2/L4). Druid is browsable, subscribable, independently
-verifiable in a browser, and pushes alerts. Built + awaiting confirmation: M2a, M2b-1,
-M2b-2, M3a, M4a, M5a, M5b, M5c. Queued (breadth/depth): **M2b-3** (OpenTimestamps —
-deferred), **M2c** (tile serving), **M3b** (render collector), **M4b** (NetCDF/xarray),
-**M6** (embedding/LLM triage), **M7** (federated overlay), **M8** (witness cosigning).
+**Current phase:** **the public ship (M5) is complete and confirmed** — everything from
+M0 through M5c has passed its ROADMAP acceptance tests (confirmation pass 2026-07-10,
+below). The trust spine (M0–M2b-2), four-layer detection (L0/L1/L2/L4), and the public
+product (record + RSS, in-browser WASM verifier, push alerts + search) are all live.
+Queued (breadth/depth): **M2b-3** (OpenTimestamps — deferred), **M2c** (tile serving),
+**M3b** (render collector), **M4b** (NetCDF/xarray), **M6** (embedding/LLM triage),
+**M7** (federated overlay), **M8** (witness cosigning).
 
 ### State of the tree
 
@@ -35,7 +35,46 @@ deferred), **M2c** (tile serving), **M3b** (render collector), **M4b** (NetCDF/x
 
 ---
 
-## M5c — Push alerts + client-side search · built 2026-07-03 (awaiting test)
+## Confirmation pass — M2a → M5c all confirmed; anchor aggregation fixed (ADR-0005) · 2026-07-10
+
+Ran every unconfirmed milestone's ROADMAP **Test** steps end-to-end on a fresh
+`druid-data`; all eight (M2a, M2b-1/2, M3a, M4a, M5a/b/c) pass and are ticked.
+
+**Evidence.** Suites: `ruff` + `mypy` clean, `pytest` **34/34**, `cargo test` **15/15**,
+clippy/fmt clean. Live: real `observe` of epa-ghgrp; L1/L2/L4 scenarios replayed through
+the real pipeline (injected fetcher, clearly-synthetic `druid.invalid` fixture URLs) →
+`TermSubstitution [High]`, `NumericThresholdChange [High]` (10→15 ppb), `SchemaChange
+[High]` (dropped column), `DistributionalShift [High]` (re-baseline + row_count); ledger
+`VALID 11 entries`. Anchored via **real DigiCert + FreeTSA** (`anchor --tsa
+digicert,freetsa`); `bundle` → `verify-bundle` (no `--root`) → `VALID … 2 anchor(s)
+verified - existed no later than 2026-07-10T16:40:18Z`; one flipped artifact byte →
+`INVALID`; dev-TSA anchor + `--root` → 3 anchors verified. Site: `druid export` → valid
+`record.json` (4 targets / 6 events) + 5 well-formed RSS feeds; `astro build` → **12
+pages**; `/verify` exercised **through the page's own file-input + button** → verdicts
+byte-for-byte identical to native `druid-verify` (VALID + time bound; tampered →
+INVALID); home-page search filters 6→1 ("numeric"), →0 + no-results message, reset→6;
+console clean. `notify --dry-run` → 13 pending deliveries across 3 subscriptions,
+correctly filtered. Committed sample `record.json`/`sample-proof.json` refreshed to the
+fresh ledger (same pubkey across record + sample bundle).
+
+**One trust-core fix (surfaced, per ADR-0005).** M2b-2's embedded roots made
+`verify_bundle` reject a whole bundle over any anchor it couldn't attribute — a dev-TSA
+anchor without `--root` returned `INVALID` even though the inclusion proof and both real
+anchors were fine, contradicting M2b-1's documented "UNCHECKED" intent and making bundles
+fragile against verifier root-set skew. Fixed to the **C2SP witness model**: an
+internally-consistent token whose TSA root isn't pinned (`ERR_UNTRUSTED_ROOT`, the only
+distinguishable non-tamper failure) is reported "present but not verified", claims no
+time bound, and leaves the verdict to the inclusion proof + verified anchors; **every
+other token failure stays fatal** (corruption anywhere rejects the bundle). Unsupported
+anchor types are reported the same way instead of silently skipped — no silent drops in
+either direction. ROADMAP M2b-1's "pin the wrong root → INVALID" line updated
+accordingly; unit-level strictness (`untrusted_tsa_root_is_rejected`) unchanged; pytest
+`test_unpinned_anchor_is_reported_not_fatal` covers both halves. M8's cosignatures
+inherit these semantics.
+
+---
+
+## M5c — Push alerts + client-side search · built 2026-07-03 (✓ confirmed 2026-07-10)
 
 Closes out the public ship: the record now *pushes* to subscribers and is searchable.
 
@@ -60,7 +99,7 @@ a "no results" message, reset→all; no console errors.
 
 ---
 
-## M5b — In-browser WASM verifier · built 2026-07-02 (awaiting test)
+## M5b — In-browser WASM verifier · built 2026-07-02 (✓ confirmed 2026-07-10)
 
 The headline demo of Druid's whole thesis: **anyone verifies the record offline, in a
 browser, trusting no one.** The proof is transferable and doesn't route through Druid.
@@ -91,7 +130,7 @@ Client-side search + webhook/email push are M5c.
 
 ---
 
-## M5a — Public record (Astro) + RSS feeds · built 2026-07-02 (awaiting test)
+## M5a — Public record (Astro) + RSS feeds · built 2026-07-02 (✓ confirmed 2026-07-10)
 
 The public ship, first slice: make the record **browsable and subscribable**. Trust spine
 solid + detection across four layers, so now it becomes *citable*.
@@ -124,7 +163,7 @@ verify + search (M5b) and webhook/email push (M5c) are next.
 
 ---
 
-## M4a — L4 tabular dataset diffing · built 2026-07-02 (awaiting test)
+## M4a — L4 tabular dataset diffing · built 2026-07-02 (✓ confirmed 2026-07-10)
 
 The other largely-novel detection capability (DESIGN §6.2): catch *silent dataset
 manipulation* — a column quietly dropped, a series re-baselined, a record set truncated.
@@ -153,7 +192,7 @@ points at a `.zip`, so a live `observe` on it will note "could not parse" until 
 
 ---
 
-## M3a — L2 numeric / threshold extraction · built 2026-07-02 (awaiting test)
+## M3a — L2 numeric / threshold extraction · built 2026-07-02 (✓ confirmed 2026-07-10)
 
 With the trust spine hardened (M0–M2b-2), this deepens what Druid *catches* — the
 canonical manipulation: a regulatory number quietly edited. (Pulled ahead of M2b-3, whose
@@ -180,7 +219,7 @@ years/counts). Live: two versions of an EPA page ("reporting threshold … 10 pp
 
 ---
 
-## M2b-2 — Independent third-party TSAs · built 2026-07-01 (awaiting test)
+## M2b-2 — Independent third-party TSAs · built 2026-07-01 (✓ confirmed 2026-07-10)
 
 The step that makes the time bound *real*: anchor against independent operators Druid
 doesn't control, and ship their roots pinned so anchors verify offline by default.
@@ -216,7 +255,7 @@ Live: `anchor --tsa digicert,freetsa` → 2 tokens; `verify-bundle` (no `--root`
 
 ---
 
-## M2b-1 — RFC 3161 anchor + offline verifier · built 2026-07-01 (awaiting test)
+## M2b-1 — RFC 3161 anchor + offline verifier · built 2026-07-01 (✓ confirmed 2026-07-10)
 
 Anchors bind a checkpoint to a *time*, so the bundle can (eventually) claim "existed no
 later than T". This slice delivers the genuinely-hard, correctness-critical half: a
@@ -263,7 +302,7 @@ ephemeral dev TSA at runtime (openssl), so nothing secret is committed.
 
 ---
 
-## M2a — Self-verifying proof bundle · built 2026-06-30 (awaiting test)
+## M2a — Self-verifying proof bundle · built 2026-06-30 (✓ confirmed 2026-07-10)
 
 The "citable" artifact: a single file anyone can verify offline, trusting neither the
 government nor Druid. Builds directly on M1's `offline_verify`.
