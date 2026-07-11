@@ -6,11 +6,11 @@ acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking 
 got done and why" companion.
 
 **Current phase:** the public ship (M5) is complete and confirmed; the trust spine is
-self-serving (**M2c** tile files); and detection now reaches **JS-rendered pages**
-(**M3b** render collector). Everything M0–M5c + M2c + M3b has passed its ROADMAP
-acceptance tests. Queued (breadth/depth): **M4b** (NetCDF/xarray), **M2b-3**
-(OpenTimestamps — deferred), **M6** (embedding/LLM triage), **M7** (federated overlay),
-**M8** (witness cosigning).
+self-serving (**M2c** tile files); and detection now spans **five layers + JS-rendered
+pages + scientific datasets** — **M3b** render collector and **M4b** NetCDF/HDF + zip/xlsx
+diffing. Everything M0–M5c + M2c + M3b + M4b has passed its ROADMAP acceptance tests.
+Queued: **M2b-3** (OpenTimestamps — deferred), **M6** (embedding/LLM triage), **M7**
+(federated overlay), **M8** (witness cosigning).
 
 ### State of the tree
 
@@ -26,13 +26,65 @@ acceptance tests. Queued (breadth/depth): **M4b** (NetCDF/xarray), **M2b-3**
 | RFC 3161 anchoring | `rust/…/rfc3161.rs`, `src/druid/anchors.py` | ✅ offline verify (RSA/ECDSA P-256/384/521), real DigiCert+FreeTSA TSAs, pinned roots (M2b-1/2) |
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
 | Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
-| Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + dataset schema/distributional (M4a) |
+| Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + tabular (M4a) + NetCDF/HDF + zip/xlsx (M4b) |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
 | CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`anchor`/`bundle`/`verify-bundle`/`export` |
 | Public record + feeds | `src/druid/web/`, `web/` (Astro) | ✅ `record.json` + RSS + a browsable static site (M5a) |
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M4b — Scientific/geospatial + packed dataset diffing · built + confirmed 2026-07-10
+
+Extends L4 to the formats agencies actually publish scientific data in — NetCDF/HDF —
+plus the containers they ship it in (`.zip`, `.xlsx`), catching the same silent
+manipulations one layer down.
+
+**What shipped.** `differ/dataset.py` became a **magic-byte format router**:
+`detect_format` sniffs `CDF`→netcdf, the HDF5 signature→hdf5, `PK`→xlsx-or-zip (an xlsx
+is a zip carrying `[Content_Types].xml` + `xl/`), `{`/`[`→json, else csv; `_route`
+dispatches and fails soft to a `MetadataChange` on unparseable/absent-backend payloads.
+New `differ/netcdf.py` (`netcdf_diff`, xarray) flags **variable presence** (removed=High,
+added=Medium), **dimension-size** shifts, **global + per-variable attribute** changes
+(`MetadataChange` — units/fill/provenance), and **per-variable summary-stat** shifts
+(mean/min/max, numpy finite-filtered, reusing `distribution_changed`). `.xlsx` →
+per-sheet tabular diff (sheet presence + each sheet through the existing column/
+distributional logic, scoped `sheet:<n>`); `.zip` → member presence + **recursion** into
+each *changed* member via `_route` (so a CSV or NetCDF inside a zip is fully diffed,
+scoped `member:<n>`). The tabular CSV/JSON path is factored out unchanged (M4a tests pass
+byte-identically). Backends (`xarray`/`scipy`/`h5netcdf`/`h5py`/`openpyxl`) are an
+optional **`science` extra**, lazily imported — the tabular + zip paths need none. This
+also resolves the M4a note: the seeded `epa-ghgrp-data` `.zip` target now unpacks instead
+of reporting "could not parse".
+
+**Adversarial review (workflow) caught seven real bugs — all fixed.** A two-reviewer +
+per-finding-skeptic workflow over the diff confirmed and I fixed: (1) json↔csv treated as
+*incompatible* formats, so a serialization switch masked a real column-drop — routing now
+keys on **handler family** (json/csv both tabular); (2) a **2-3 byte magic prefix
+collided** with text (a CSV whose first column is `PK…`/`CDF…` misrouted to zip/NetCDF and
+lost its diff) — detection now requires the **full signature** (`PK\x03\x04`, `CDF\x0{1,2,5}`);
+(3) nested-zip evidence mis-scoped (inner member `**`-overrode outer) — scope now
+**accumulates a path** (`a.zip/data.csv`); (4) `prev` xarray handle **leaked** if opening
+`curr` raised — now an `ExitStack`; (5) a NaN attribute spuriously read as changed
+(`nan != nan`) *and* wrote a non-standard `NaN` token into the leaf — `_scalar` stringifies
+non-finite floats and `Ledger.canonical()` is now `allow_nan=False` (fail-loud, never
+commit unparseable leaf JSON); (6) a **silent all-NaN data wipe** of a variable went
+undetected — `_var_stats` distinguishes non-numeric (`None`) from all-NaN (`{}`) and a
+finite→all-NaN transition is now a `DistributionalShift [High]`; (7) a complex/`datetime64`
+attribute crashed the ledger append — `_scalar` coerces any non-JSON-native value to a
+stable string. Two touched the trust boundary (5 hardens `canonical`; the rest are the
+detection layer).
+
+**Verified.** `ruff` + `mypy` clean; `pytest` → **64** (+17 M4b + 7 review-regression:
+handler-family routing on a json→csv column drop; magic-prefix non-collision; nested-zip
+member path; all-NaN wipe flagged; NaN attr not spuriously changed; `canonical` rejects
+non-finite; `_scalar` JSON-safety; corrupt-curr fails soft). Installed the `science` extra
+and ran the live path: two NetCDF versions through the dataset pipeline → `SchemaChange
+[High]` (ch4 dropped), `DistributionalShift [High]` (co2 mean 414.2→314.2),
+`MetadataChange` (units ppm→ppb), ledger `VALID`. Both NetCDF3 (scipy) and NetCDF4/HDF5
+(h5netcdf) backends exercised. Rust untouched (20 tests still green).
 
 ---
 
