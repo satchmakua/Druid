@@ -6,11 +6,12 @@ acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking 
 got done and why" companion.
 
 **Current phase:** the public ship (M5) is complete and confirmed; the trust spine is
-self-serving (**M2c** tile files); and detection now spans **five layers + JS-rendered
-pages + scientific datasets** — **M3b** render collector and **M4b** NetCDF/HDF + zip/xlsx
-diffing. Everything M0–M5c + M2c + M3b + M4b has passed its ROADMAP acceptance tests.
-Queued: **M2b-3** (OpenTimestamps — deferred), **M6** (embedding/LLM triage), **M7**
-(federated overlay), **M8** (witness cosigning).
+self-serving (**M2c** tile files); detection spans **JS-rendered pages** (**M3b**) and
+**scientific datasets** (**M4b**); and **M6** adds the reviewer-aid layers — L3 embedding
+triage (reworded-passage detection) + L5 Claude change summaries, both outside the trust
+core. Everything M0–M5c + M2c + M3b + M4b + M6 has passed its ROADMAP acceptance tests.
+Queued: **M2b-3** (OpenTimestamps — deferred), **M7** (federated overlay), **M8**
+(witness cosigning).
 
 ### State of the tree
 
@@ -27,12 +28,68 @@ Queued: **M2b-3** (OpenTimestamps — deferred), **M6** (embedding/LLM triage), 
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
 | Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
 | Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + tabular (M4a) + NetCDF/HDF + zip/xlsx (M4b) |
+| Reviewer aids L3/L5 | `differ/embedding.py`, `triage.py` | ✅ embedding triage + Claude summaries, injectable, outside the trust core (M6) |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
 | CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`anchor`/`bundle`/`verify-bundle`/`export` |
 | Public record + feeds | `src/druid/web/`, `web/` (Astro) | ✅ `record.json` + RSS + a browsable static site (M5a) |
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M6 — Embedding triage + LLM change summaries · built + confirmed 2026-07-10
+
+The reviewer-aid layers (DESIGN §6.2, L3 + L5): everything here is **triage, not truth** —
+best-effort signals stored alongside the attested record, never inside a ledger leaf, so
+the trust core is untouched.
+
+**What shipped.** **L3** (`differ/embedding.py`) — an injectable `Embedder` port (default
+`sentence_transformer_embedder`, `all-MiniLM-L6-v2`, lazily loaded) drives
+`embedding_triage`: it segments a normalised text change into sentences, embeds each
+*changed* passage, and scores it against its closest prior passage by cosine — banding into
+`ContentEdit [reworded]` / `[new_passage]` (surfaced for review, Medium) when semantically
+distant, `CosmeticOnly` for a minor edit, and silence when near-identical. The pipeline
+takes an optional `embedder`; when present it **owns** the interpretation of a change L1/L2
+didn't explain (replacing the coarse L0 `ContentEdit` fallback), reachable via `druid
+observe --embed`. **L5** (`triage.py`) — an injectable `Summarizer` port (default
+`claude_summarizer`, Claude Messages API, `claude-opus-4-8`) drafts a plain-language
+"what changed and does it alter meaning" summary of a reworded passage; `druid triage
+<target>` writes it to a **review sidecar** (`druid-data/review/<hash>.json`) with a
+`druid.review/v1` schema and an explicit "not attested, not in the ledger" disclaimer.
+Both live behind an optional `triage` extra (sentence-transformers / anthropic).
+
+**Scope/decisions.** L3 is a *signal* — it fires only when the high-precision layers found
+nothing, keeping it from muddying attested-looking output; the score's sub-classification
+(reworded vs new) is best-effort and human-reviewed. L5 is **reviewers-only and never
+attested**: the summary is a sidecar, so an LLM hallucination can never enter the immutable
+log. A live Claude call is **billable + outward-facing**, so it's not fired automatically;
+`claude_summarizer(client=...)` is injectable and the request shape (model / system / single
+user turn / `max_tokens`) is verified against a fake client per the claude-api skill.
+
+**Adversarial review (workflow) caught one real bug — fixed.** With an embedder
+configured, `embedding_triage` inspects only *added/reworded* passages, so a pure sentence
+**deletion** (or a change confined to sub-4-word sentences the segmenter drops) produced no
+L3 finding — and the coarse `ContentEdit` floor only ran in the no-embedder branch, so the
+diff annotation was **lost entirely** (the observation leaf is still attested; only the
+interpretation leaf vanished, and `druid log`/RSS/`notify` would surface nothing). Enabling
+M6's embedder was thus strictly worse for deletions. Fixed: the coarse floor now fires
+whenever no layer (L1/L2/L3) itemised a real text change — L3 augments, never removes, the
+guarantee. Regression test added (embedder + a pure deletion still yields a `ContentEdit`).
+
+**Verified.** `ruff` + `mypy` clean; `pytest` → **73** (+9 M6: reworded passage surfaced
+as `ContentEdit [L3-embedding]`; near-duplicate not a review finding; unchanged text quiet;
+pipeline uses L3 when an embedder is present and keeps the coarse fallback when absent; the
+L5 summary lands in the sidecar with the **ledger entry count unchanged** and `verify`
+still VALID; `summarize_event` returns None when there's nothing to explain; and
+`claude_summarizer` builds a correct Messages request via an injected fake client — no SDK,
+no network, no billable call). A deterministic bag-of-words fake `Embedder` exercises the
+banding offline. **Live semantic confirmation** (installed the `triage` extra,
+`all-MiniLM-L6-v2`): a policy-weakening rewrite with *different vocabulary* — "firmly
+committed to aggressively reducing greenhouse gas emissions" → "will weigh voluntary,
+market-based approaches" — scored cosine **0.443** → `ContentEdit [reworded]` (exactly the
+low-lexical-overlap case bag-of-words would miss), while a cosmetic reorder scored **0.964**
+→ `CosmeticOnly`, no review finding. Rust untouched (20 tests still green).
 
 ---
 
