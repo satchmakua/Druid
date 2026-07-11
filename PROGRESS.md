@@ -5,13 +5,13 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** the public ship (M5) is complete and confirmed; the trust spine is
-self-serving (**M2c** tile files); detection spans **JS-rendered pages** (**M3b**) and
-**scientific datasets** (**M4b**); **M6** adds the reviewer-aid layers (L3 embedding triage
-+ L5 Claude summaries); and **M7** layers a **federated overlay** — third-party archive
-metadata cross-referenced with Druid's attested record and badged by verifiability.
-Everything M0–M5c + M2c + M3b + M4b + M6 + M7 has passed its ROADMAP acceptance tests.
-Queued: **M2b-3** (OpenTimestamps — deferred), **M8** (witness cosigning).
+**Current phase:** **the roadmap is complete — every milestone M0 through M8 is built and
+confirmed.** The trust spine (Merkle log, signed checkpoints, RFC 3161 anchors, C2SP tile
+serving, **M8 multi-party witness cosignatures**) is done; detection spans five layers plus
+JS-rendered pages (M3b) and scientific datasets (M4b); the public product ships a browsable
+record, RSS, in-browser WASM verification, push alerts, search, reviewer-aid triage (M6),
+and a federated overlay (M7). Only **M2b-3** (OpenTimestamps) remains deliberately deferred
+(a distinct anchor type needing a carried Bitcoin block header).
 
 ### State of the tree
 
@@ -21,6 +21,7 @@ Queued: **M2b-3** (OpenTimestamps — deferred), **M8** (witness cosigning).
 | Blob store | `src/druid/store.py` | ✅ filesystem, content-addressed, sharded, dedups |
 | Records / taxonomy | `src/druid/models.py` | ✅ `Observation`, `DiffRecord`, `DiffType` |
 | **Trust core (Rust)** | `rust/ledger-core/` | ✅ tlog Merkle log + signed checkpoints + inclusion/consistency proofs + `druid-verify` |
+| Witness cosignatures | `rust/…/cosignature.rs`, `src/druid/witness.py` | ✅ C2SP tlog-cosignature (0x04) + quorum verification; `druid cosign` / `--witness --quorum` (M8) |
 | Ledger front end | `src/druid/ledger/core.py` | ✅ shells out to `druid-ledger`/`druid-verify` (no FFI) |
 | Proof bundle | `pipeline.bundle` + `verify_bundle` (Rust) | ✅ `druid.proofbundle/v1`, offline-verified (M2a) |
 | Tile serving | `Ledger::write_tiles` + `druid-verify tiles` | ✅ C2SP tiles published on append; proofs reconstruct from tiles alone (M2c) |
@@ -36,6 +37,42 @@ Queued: **M2b-3** (OpenTimestamps — deferred), **M8** (witness cosigning).
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M8 — Multi-party witness cosignatures · built + confirmed 2026-07-10
+
+The last piece of the trust spine: stop trusting the log operator *alone*. Independent
+witnesses co-sign each checkpoint, and a verifier can require a **quorum** — so a
+split-view / equivocating log (an operator showing different histories to different people)
+is caught. Heuristic-free, C2SP-conformant, no bespoke crypto.
+
+**What shipped.** `rust/ledger-core/src/cosignature.rs` implements C2SP tlog-cosignature on
+the same audited `ed25519-dalek` primitive as the log's signed note: the witness key ID
+uses algorithm byte **0x04** (`SHA-256(name || 0x0A || 0x04 || pubkey)[:4]`), and a
+cosignature is an Ed25519 signature over the exact message `cosignature/v1\ntime <T>\n<note
+body>` with the 76-byte line payload `keyID(4) || timestamp(8, big-endian) || sig(64)`
+(spec verified against c2sp.org/tlog-cosignature before coding). `verify_bundle` gained
+`(witnesses, quorum)`: it counts *distinct* pinned witnesses that validly cosigned the
+bundle's checkpoint and rejects if fewer than the quorum. Cosignatures ride the bundle as a
+separate `cosignatures` array (ADR-0006) so they don't disturb the anchored checkpoint
+bytes — anchoring (time) and cosigning (multi-party) compose cleanly. Tooling: `druid-ledger
+cosign` (the kernel produces the cosignature line so the format lives in one place),
+`src/druid/witness.py` (independent witness Ed25519 keys via `cryptography`),
+`Druid.cosign(witness)` (stores a cosignature per checkpoint, keyed by digest, one per
+witness), `druid cosign --name --key-file`, and `druid-verify bundle --witness name:hex
+--quorum K`. The in-browser WASM verifier keeps quorum 0 (reports, doesn't require —
+enforcement is a native/service policy).
+
+**Verified.** `cargo test` → **24** (+4 cosignature: cosign→verify roundtrip, wrong key
+rejected, tampered body rejected, wrong name rejected), clippy `-D warnings` + fmt clean,
+wasm target compiles. Python: `ruff` + `mypy` clean, `pytest` → **85** (+5 witness: the
+2-of-3 quorum — 0 and 1 cosignatures rejected, 2 validates with "2/2 verified"; an unpinned
+witness's cosignature doesn't count; a tampered checkpoint is rejected; quorum 0 stays
+backward-compatible; witness keys are distinct + persist stably). **Live** through the CLI
+on the real ledger: two witnesses `druid cosign` the checkpoint, then `verify-bundle
+--quorum 2` → `VALID … 2/2 witness cosignature(s) verified`, `--quorum 3` → `INVALID witness
+quorum not met: 2 of 3`.
 
 ---
 
