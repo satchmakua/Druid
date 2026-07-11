@@ -5,12 +5,12 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** **the public ship (M5) is complete and confirmed**, and the trust
-spine is now fully self-serving: **M2c** publishes the C2SP tile files so verifiers
-recompute proofs from fetched tiles alone. Everything M0–M5c + M2c has passed its
-ROADMAP acceptance tests. Queued (breadth/depth): **M3b** (render collector), **M4b**
-(NetCDF/xarray), **M2b-3** (OpenTimestamps — deferred), **M6** (embedding/LLM triage),
-**M7** (federated overlay), **M8** (witness cosigning).
+**Current phase:** the public ship (M5) is complete and confirmed; the trust spine is
+self-serving (**M2c** tile files); and detection now reaches **JS-rendered pages**
+(**M3b** render collector). Everything M0–M5c + M2c + M3b has passed its ROADMAP
+acceptance tests. Queued (breadth/depth): **M4b** (NetCDF/xarray), **M2b-3**
+(OpenTimestamps — deferred), **M6** (embedding/LLM triage), **M7** (federated overlay),
+**M8** (witness cosigning).
 
 ### State of the tree
 
@@ -25,6 +25,7 @@ ROADMAP acceptance tests. Queued (breadth/depth): **M3b** (render collector), **
 | Tile serving | `Ledger::write_tiles` + `druid-verify tiles` | ✅ C2SP tiles published on append; proofs reconstruct from tiles alone (M2c) |
 | RFC 3161 anchoring | `rust/…/rfc3161.rs`, `src/druid/anchors.py` | ✅ offline verify (RSA/ECDSA P-256/384/521), real DigiCert+FreeTSA TSAs, pinned roots (M2b-1/2) |
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
+| Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
 | Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + dataset schema/distributional (M4a) |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
 | CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`anchor`/`bundle`/`verify-bundle`/`export` |
@@ -32,6 +33,62 @@ ROADMAP acceptance tests. Queued (breadth/depth): **M3b** (render collector), **
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M3b — Render collector · built + confirmed 2026-07-10
+
+Detection reaches **JavaScript tools** (EJScreen-class maps/dashboards): the static shell
+is nearly empty, so a headless browser captures both the post-JS DOM *and* the page's own
+API/data calls — the layer where the real regulatory content actually lives.
+
+**What shipped.** `collectors/render.py` — a `RenderCollector` behind an injectable
+`RenderEngine` port (mirrors `static`'s `Fetcher`), so tests exercise it with a fake
+engine and **need no browser**. The default `playwright_engine` drives headless Chromium
+(polite: identifiable UA, bounded timeout, no auth/CAPTCHA), lazily importing Playwright —
+an **optional `render` extra**, so the core install and CI stay light. The collector
+attests the **rendered DOM** as the primary artifact (`raw_bytes_hash == rendered_dom_hash`,
+so the existing diff/bundle/tile machinery works unchanged and term/numeric watch run on
+what a *reader* sees) and captures the page's **XHR/fetch data calls**: each response body
+is stored content-addressed and referenced by hash from a canonical
+`druid.captured_requests/v1` manifest (`captured_requests_hash`). The pipeline gained a
+**collector registry** dispatching on `target.collector` (`_collector_for`), and
+`collect()` now returns a `Collected` (observation + primary body + `side_artifacts`) so a
+collector can emit extra blobs the pipeline stores. New model field
+`Observation.captured_requests_hash` (DESIGN §3 had reserved it). Curated target
+`epa-ejscreen` (collector=`render`) added.
+
+**Scope/decisions.** Rendered DOM is the attested body (not the raw shell) — the honest
+"what the page showed" for a JS tool. Data calls = XHR/fetch only (not images/CSS/fonts):
+the *data*, not the decoration. Response bodies are stored (retrievable/verifiable), the
+manifest stays small by referencing them by hash. Robots-awareness + cross-run
+rate-limiting still ride with the scheduler (as for `static`). Rendered-DOM
+non-determinism (nonces/timestamps in the DOM) can cause cosmetic diffs — an L0/render
+normalisation refinement for later. Routing captured API JSON into the L4 dataset differ
+is a natural M3b×M4 crossover, deferred.
+
+**Adversarial review (workflow) caught two real bugs — both fixed.** A two-reviewer +
+per-finding-skeptic workflow over the diff confirmed: (1) `page.goto(wait_until=
+"networkidle")` **throws** on the polling/SSE dashboards this collector targets (idle
+never fires → TimeoutError → *no* observation captured — failing hardest on exactly the
+JS-heavy pages it exists for; Playwright's own docs discourage networkidle). Fixed to
+wait for `domcontentloaded` then a **bounded** networkidle settle that captures whatever
+rendered if the window elapses. (2) The "canonical" request manifest recorded calls in
+**network-arrival order**, so identical call sets hashed differently (`sort_keys` sorts
+dict keys, not list elements). Fixed by sorting `manifest_calls` by a stable key —
+`captured_requests_hash` is now genuinely content-determined. (Both medium; neither
+touched the trust core.)
+
+**Verified.** `ruff` + `mypy` clean; `pytest` → **45** (+7 render: collect captures
+DOM+calls; manifest hash is call-order-independent; pipeline routes render targets &
+stores side artifacts; detection fires on the rendered DOM; a render observation is
+citable offline; unregistered-collector rejected; **a live real-Playwright test**
+rendering a localhost JS page). Installed Playwright 1.61 + Chromium and ran the live
+path (with the fixed load strategy): a page whose JS `fetch()`es `/api/scores.json` and
+mutates the DOM → the collector captured `benzene=12` in the DOM and the `/api/scores.json`
+response body. Live through the CLI pipeline into the real ledger: render observation
+`[200]`, injected data in the attested DOM, the API response retrievable by its manifest
+hash, and the leaf `VALID … via tiles alone`. Rust untouched (20 tests still green).
 
 ---
 
