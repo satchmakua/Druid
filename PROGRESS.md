@@ -7,11 +7,11 @@ got done and why" companion.
 
 **Current phase:** the public ship (M5) is complete and confirmed; the trust spine is
 self-serving (**M2c** tile files); detection spans **JS-rendered pages** (**M3b**) and
-**scientific datasets** (**M4b**); and **M6** adds the reviewer-aid layers — L3 embedding
-triage (reworded-passage detection) + L5 Claude change summaries, both outside the trust
-core. Everything M0–M5c + M2c + M3b + M4b + M6 has passed its ROADMAP acceptance tests.
-Queued: **M2b-3** (OpenTimestamps — deferred), **M7** (federated overlay), **M8**
-(witness cosigning).
+**scientific datasets** (**M4b**); **M6** adds the reviewer-aid layers (L3 embedding triage
++ L5 Claude summaries); and **M7** layers a **federated overlay** — third-party archive
+metadata cross-referenced with Druid's attested record and badged by verifiability.
+Everything M0–M5c + M2c + M3b + M4b + M6 + M7 has passed its ROADMAP acceptance tests.
+Queued: **M2b-3** (OpenTimestamps — deferred), **M8** (witness cosigning).
 
 ### State of the tree
 
@@ -29,12 +29,69 @@ Queued: **M2b-3** (OpenTimestamps — deferred), **M7** (federated overlay), **M
 | Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
 | Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + tabular (M4a) + NetCDF/HDF + zip/xlsx (M4b) |
 | Reviewer aids L3/L5 | `differ/embedding.py`, `triage.py` | ✅ embedding triage + Claude summaries, injectable, outside the trust core (M6) |
+| Federated overlay | `src/druid/overlay.py`, `web/…/overlay.astro` | ✅ third-party archives (Wayback CDX) cross-referenced + attested-badging with downloadable bundles (M7) |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
 | CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`anchor`/`bundle`/`verify-bundle`/`export` |
 | Public record + feeds | `src/druid/web/`, `web/` (Astro) | ✅ `record.json` + RSS + a browsable static site (M5a) |
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M7 — Federated overlay index + verification badging · built + confirmed 2026-07-10
+
+The rescued corpus becomes *queryable with verifiability as the differentiator* (DESIGN
+§8): Druid's curated, attested record layered over the far larger volunteer archive
+ecosystem, so a searcher sees at a glance which copies come with a proof.
+
+**What shipped.** `overlay.py` — an injectable `ArchiveSource` port (so the harvest is
+offline-testable) with a default `WaybackSource` that queries the Internet Archive **CDX
+API** (polite: identifiable UA, bounded timeout, read-only, `collapse=digest`); OSF /
+Dataverse / Perma.cc / PEDP adapters are the same port over their metadata APIs.
+`build_overlay` cross-references third-party captures with Druid's attested observations
+(matched by a lenient URL identity key — scheme/`www`/trailing-slash insensitive) into a
+`druid.overlay/v1` index: each resource is badged **druid-attested** — carrying a
+downloadable proof-bundle reference — when Druid observed it, or left **unverified** when
+only a third party archived it. `write_overlay` / `druid overlay` emit `overlay.json` +
+`bundles/<target>.json` for every attested resource. A `web/src/pages/overlay.astro` page
+renders the badged, client-side-searchable list with bundle-download + verify links; a
+clean reproducible sample (deterministic source, real bundles) ships committed like
+`record.json`.
+
+**Scope/decisions.** Badging is the point (DESIGN §1): a third-party copy is a *real,
+valuable* archive, but Druid can prove nothing about its bytes, so it gets no badge — the
+overlay never overclaims. The harvest stays polite and read-only (no crawling; CDX is a
+single GET per URL). The overlay build needs network, so it's a separate `druid overlay`
+step, not folded into the offline `export`.
+
+**Adversarial review (workflow) caught three real bugs — two of them overclaims — all
+fixed.** (1) Two curated targets whose URLs collapse under the lenient key, and (2) a
+single target observed at two URLs, both produced overlay rows that **advertised one
+observation's hash but referenced a bundle proving a different one** — a direct violation
+of "don't overclaim verifiability" (DESIGN §4.2). Root cause: the advertised hash was
+keyed per-URL-latest while the bundle proved the *target's* globally-latest observation.
+Fixed by keying attestation on the **specific observation leaf** (its ledger index):
+identity/hash/index now move together to the latest leaf for each URL, the bundle
+reference is `bundles/<leaf-index>.json`, and `write_overlay` generates
+`druid.bundle(target, index)` — so the shipped proof attests *exactly* the advertised
+hash + URL, and an attested row shows the URL Druid observed (not a third party's
+equivalent capture form). (3) A ragged/truncated CDX row raised `IndexError` and aborted
+the whole harvest — now short rows are skipped. Regression tests pin the invariant
+(every attested bundle proves its advertised hash+URL, incl. a URL-that-moved case) and
+the ragged-row skip.
+
+**Verified.** `ruff` + `mypy` clean; `pytest` → **80** (+7 overlay: a resource in both
+Wayback and Druid → attested badge + a leaf-keyed bundle; a third-party-only sibling →
+no badge; an attested-only resource appears with an empty external list; `WaybackSource`
+parses real CDX rows and handles an empty result; `write_overlay` emits a valid
+`druid.proofbundle/v1`). **Live** (`druid overlay --sources wayback` on the real ledger):
+12 resources, 6 attested — `www.epa.gov/ghgreporting` badged attested with **7 real
+Wayback captures back to 2012** + a downloadable bundle, while `ejscreen.epa.gov/mapper`
+(Wayback-only) got no badge. The `/overlay` page was driven in a real browser: the badge
+list renders, the bundle link resolves to a valid `druid.proofbundle/v1`, search filters
+3→2 (attested) / →1 (unverified) / →0 (no match, message shown), console clean. `astro
+build` → **13 pages**. Rust untouched (20 tests still green).
 
 ---
 
