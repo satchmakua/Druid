@@ -10,13 +10,14 @@ is proven (trust spine: Merkle log, signed checkpoints, RFC 3161 anchors, C2SP t
 M8 witness cosignatures; five-layer detection + render collector + scientific datasets;
 public product: record, RSS, WASM verify, alerts, search, triage, federated overlay).
 **Phase 5–6 (M9–M14) is now the active arc — the "real tool" work**: making Druid actually
-*operate* rather than demo. **Next up: M9** (polite collection — robots.txt + rate-limiting
-+ conditional GET; closes the half-met "polite collection" hard constraint), then M10
-scheduler (`druid run`, continuous re-observation + auto-firing alerts), M11 WARC/archive
+*operate* rather than demo. **M9 (polite collection) is built + confirmed** (robots.txt +
+per-host rate-limiting/backoff + conditional GET; closes the half-met "polite collection"
+hard constraint — proven live against real EPA robots.txt + a real 304). **Next up: M10**
+scheduler (`druid run`, continuous re-observation + auto-firing alerts), then M11 WARC/archive
 interop, M12 detection precision (pint cross-unit, structure/table-aware diff, rendered-DOM
 noise), M13 consistency-proof gossip + OpenTimestamps, M14 R2 store + Cloudflare deploy +
 independently-run witness + richer curated set + fuzz/scale tests. **No mocks on any
-production path** — prove each milestone live, as M2b–M8 were.
+production path** — prove each milestone live, as M2b–M9 were.
 
 ### State of the tree
 
@@ -31,8 +32,9 @@ production path** — prove each milestone live, as M2b–M8 were.
 | Proof bundle | `pipeline.bundle` + `verify_bundle` (Rust) | ✅ `druid.proofbundle/v1`, offline-verified (M2a) |
 | Tile serving | `Ledger::write_tiles` + `druid-verify tiles` | ✅ C2SP tiles published on append; proofs reconstruct from tiles alone (M2c) |
 | RFC 3161 anchoring | `rust/…/rfc3161.rs`, `src/druid/anchors.py` | ✅ offline verify (RSA/ECDSA P-256/384/521), real DigiCert+FreeTSA TSAs, pinned roots (M2b-1/2) |
-| Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher` |
+| Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher`, conditional-GET headers (M9) |
 | Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
+| Polite collection | `src/druid/politeness.py` | ✅ robots.txt (Disallow + Crawl-delay) + per-host rate-limit + backoff/jitter + conditional GET (304), injectable clock/robots (M9) |
 | Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + tabular (M4a) + NetCDF/HDF + zip/xlsx (M4b) |
 | Reviewer aids L3/L5 | `differ/embedding.py`, `triage.py` | ✅ embedding triage + Claude summaries, injectable, outside the trust core (M6) |
 | Federated overlay | `src/druid/overlay.py`, `web/…/overlay.astro` | ✅ third-party archives (Wayback CDX) cross-referenced + attested-badging with downloadable bundles (M7) |
@@ -42,6 +44,65 @@ production path** — prove each milestone live, as M2b–M8 were.
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M9 — Polite collection layer · built + confirmed 2026-07-11
+
+The first Phase-5 milestone: turn "polite by construction" from a *claim* into an enforced
+layer. M0–M8 fetched courteously (identifiable UA, bounded timeout, no auth/CAPTCHA) but
+only *half*-met the stated hard constraint — no robots.txt, no cross-run rate-limiting, no
+conditional GET. M9 closes that gap. It is a **courtesy layer, not part of the trust core**:
+it decides only *whether and when* to fetch, never what is attested; a 304/skip never
+touches the ledger.
+
+**What shipped.** `src/druid/politeness.py` — a single injectable `PolitenessPolicy` that
+wraps a collector's network seam via `.fetcher(inner)` / `.engine(inner)` adapters (drop-in
+`Fetcher` / `RenderEngine`):
+
+- **robots.txt** — fetched once per host (cached with a TTL), parsed by the stdlib
+  `urllib.robotparser` (no bespoke parsing, per the "no hand-rolled where a stdlib exists"
+  rule), honoring `Disallow` **and** `Crawl-delay` for our UA token. A disallowed URL is
+  never fetched (`CollectionSkipped`). Missing/unreachable robots is *fail-open* (allow) — a
+  documented choice for a small, hand-vetted set of public-domain federal targets; a
+  *present* policy is honored strictly. (`.modified()` is called explicitly after `parse()`
+  so `can_fetch`/`crawl_delay` never hit RobotFileParser's conservative unread-file default.)
+- **per-host rate-limiting** — a minimum interval between requests to a host, raised to the
+  host's `Crawl-delay` when declared, enforced through an **injectable clock** (a no-op in
+  tests, real sleeping in prod).
+- **exponential backoff with jitter** — a transient status (429/5xx) or a network exception
+  is retried with a capped, jittered backoff (`base·2^n`, capped, AWS full-jitter);
+  persistent transient failure raises `TransientFetchError` rather than logging a bogus 5xx
+  observation.
+- **conditional GET** — the stored `ETag`/`Last-Modified` for a URL is sent as
+  `If-None-Match`/`If-Modified-Since`; a `304` raises `NotModified`, and the pipeline logs
+  **no new leaf**. Validators persist to `druid-data/politeness-state.json` so 304 works
+  across restarts (`ObserveResult` gained a `status` — `observed`/`unchanged`/`skipped`).
+
+Wired so the **default (production) collectors are polite by construction**: `Druid.__init__`
+builds one shared policy across the static + render seams (injected collectors opt out, so
+offline tests stay bare). `httpx_fetcher` gained an optional `headers` kwarg (conditional
+validators); the `Fetcher` protocol the collector sees is unchanged.
+
+**Proof it works.** 22 new offline tests (fake clock + canned robots/responses): a
+`Disallow`-ed path is never fetched; two rapid same-host fetches are spaced ≥ the min
+interval; `Crawl-delay: 7` overrides the 1 s floor; different hosts aren't spaced against
+each other; a `304` sends the stored validator and yields no new leaf; a `503` retries with
+exponential+capped backoff then succeeds; a persistent transient error gives up after
+`max_retries` (not logged); validators survive a fresh policy instance. Full suite: **107
+Python passed** (was 85), **24 Rust passed**; ruff + mypy + clippy + fmt clean.
+
+**Live (no mocks on the production path).** `python -m druid --data-dir <tmp> observe
+epa-ghgrp` fetched EPA's real `robots.txt` (allowed; no Crawl-delay), fetched
+`www.epa.gov/ghgreporting` → `[200]` 61 797 bytes with real `ETag W/"1783830368"` +
+`Last-Modified`, logged one leaf; an **immediate second observe returned a real `304 Not
+Modified` → "no new observation logged"** (the ledger stayed at 1 entry, `verify` VALID),
+with the min-interval spacing enforced (2.36 s between requests) and the real validators
+persisted to `politeness-state.json`. This is the whole point: re-checking an unchanged page
+now costs the server a tiny conditional request and the ledger nothing.
+
+_(Also fixed a pre-existing ASCII violation in `druid log` — a `…` that corrupts to `�` on
+piped Windows cp1252 stdout — to `...`, per the standing keep-CLI-ASCII constraint.)_
 
 ---
 
