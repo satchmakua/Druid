@@ -101,6 +101,24 @@ with the min-interval spacing enforced (2.36 s between requests) and the real va
 persisted to `politeness-state.json`. This is the whole point: re-checking an unchanged page
 now costs the server a tiny conditional request and the ledger nothing.
 
+**Adversarial review (2 reviewers × 2 skeptics over the diff) hardened two real gaps.**
+Both survivors were confirmed by an independent skeptic and fixed with regression tests:
+(1) **a 304 could suppress a target's *baseline*** — validators are URL-keyed and persisted,
+but the ledger baseline is target-keyed, so a desync (a crash between saving the validator
+and appending the leaf, a ledger rebuild that leaves the cache behind, or two targets on one
+URL) let a *first* observe send `If-None-Match`, get a 304, and be silently recorded as
+"unchanged" with **no baseline leaf ever created** — the exact blind spot a watchdog must
+not have. Fix: `PolitenessPolicy.forget(url)` + the pipeline forces an unconditional fetch on
+a target's first observe (reconciling the two stores), and a 304 that still arrives with no
+baseline **fails loud** rather than silently. Proven live: after a simulated ledger rebuild
+that left `politeness-state.json` behind, re-observing correctly re-records the baseline
+(not "unchanged"). (2) **a corrupt `politeness-state.json` crashed every CLI command** —
+`_load_validators` did an unguarded `json.loads`, so a partial write bricked even `druid
+verify`/`log`, which don't depend on politeness. Fix: fail-open to `{}` on a decode error +
+**atomic** state writes (`os.replace`). The three refuted findings were correctly dismissed
+(a suppressed byte-identical *duplicate* leaf loses nothing; weak-ETag replay is
+server-controlled and valid). Final suite: **112 Python passed** (+5 regression), 24 Rust.
+
 _(Also fixed a pre-existing ASCII violation in `druid log` — a `…` that corrupts to `�` on
 piped Windows cp1252 stdout — to `...`, per the standing keep-CLI-ASCII constraint.)_
 
