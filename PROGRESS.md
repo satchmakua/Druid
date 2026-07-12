@@ -5,13 +5,18 @@ this is the working memory between build sessions. The forward-looking plan and
 acceptance tests live in [ROADMAP.md](ROADMAP.md); this is the backward-looking "what
 got done and why" companion.
 
-**Current phase:** **the roadmap is complete — every milestone M0 through M8 is built and
-confirmed.** The trust spine (Merkle log, signed checkpoints, RFC 3161 anchors, C2SP tile
-serving, **M8 multi-party witness cosignatures**) is done; detection spans five layers plus
-JS-rendered pages (M3b) and scientific datasets (M4b); the public product ships a browsable
-record, RSS, in-browser WASM verification, push alerts, search, reviewer-aid triage (M6),
-and a federated overlay (M7). Only **M2b-3** (OpenTimestamps) remains deliberately deferred
-(a distinct anchor type needing a carried Bitcoin block header).
+**Current phase:** **the core roadmap M0–M8 is complete and confirmed** — every *capability*
+is proven (trust spine: Merkle log, signed checkpoints, RFC 3161 anchors, C2SP tile serving,
+M8 witness cosignatures; five-layer detection + render collector + scientific datasets;
+public product: record, RSS, WASM verify, alerts, search, triage, federated overlay).
+**Phase 5–6 (M9–M14) is now the active arc — the "real tool" work**: making Druid actually
+*operate* rather than demo. **Next up: M9** (polite collection — robots.txt + rate-limiting
++ conditional GET; closes the half-met "polite collection" hard constraint), then M10
+scheduler (`druid run`, continuous re-observation + auto-firing alerts), M11 WARC/archive
+interop, M12 detection precision (pint cross-unit, structure/table-aware diff, rendered-DOM
+noise), M13 consistency-proof gossip + OpenTimestamps, M14 R2 store + Cloudflare deploy +
+independently-run witness + richer curated set + fuzz/scale tests. **No mocks on any
+production path** — prove each milestone live, as M2b–M8 were.
 
 ### State of the tree
 
