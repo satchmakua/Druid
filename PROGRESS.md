@@ -10,18 +10,19 @@ is proven (trust spine: Merkle log, signed checkpoints, RFC 3161 anchors, C2SP t
 M8 witness cosignatures; five-layer detection + render collector + scientific datasets;
 public product: record, RSS, WASM verify, alerts, search, triage, federated overlay).
 **Phase 5–6 (M9–M14) is now the active arc — the "real tool" work**: making Druid actually
-*operate* rather than demo. **M9 (polite collection), M10 (the scheduler), and M11 (faithful WARC capture) are built +
-confirmed.** M9: robots.txt + per-host rate-limiting/backoff + conditional GET (proven live
-against real EPA robots.txt + a real 304). M10: `druid run` re-observes the curated set on a
-per-target cadence, fires alerts on new diffs, survives restarts (proven live — real gov
-targets + an end-to-end scheduler->webhook alert). M11: each observation is archived as a
-standards **WARC** (request + response) via warcio, attested by `warc_record_hash` and
-recoverable by a warcio-independent reader (proven live — a real EPA fetch → a replayable
-WARC → export ships it). **Next up: M12** detection precision (pint cross-unit,
-structure/table-aware diff, rendered-DOM noise), then M13 consistency-proof gossip +
-OpenTimestamps, M14 R2 store + Cloudflare deploy + independently-run witness + richer curated
+*operate* rather than demo. **M9–M12 are built + confirmed.** M9: robots.txt + per-host
+rate-limiting/backoff + conditional GET (proven live against real EPA robots.txt + a real
+304). M10: `druid run` re-observes the curated set on a per-target cadence, fires alerts on
+new diffs, survives restarts (proven live — real gov targets + an end-to-end
+scheduler->webhook alert). M11: each observation is archived as a standards **WARC** (request
++ response) via warcio, attested by `warc_record_hash` and recoverable by a warcio-independent
+reader (proven live — a real EPA fetch → a replayable WARC → export ships it). M12: detection
+precision — pint cross-unit numerics (10 ppb == 0.010 ppm), structure/table-aware localized
+diffs, rendered-DOM noise suppression, and the L4 index-column truncation fix. **Next up:
+M13** consistency-proof gossip + OpenTimestamps, then M14 R2 store + Cloudflare deploy +
+independently-run witness + richer curated
 set + fuzz/scale tests. **No mocks on any production path** — prove each milestone live, as
-M2b–M11 were.
+M2b–M12 were.
 
 ### State of the tree
 
@@ -41,7 +42,7 @@ M2b–M11 were.
 | Polite collection | `src/druid/politeness.py` | ✅ robots.txt (Disallow + Crawl-delay) + per-host rate-limit + backoff/jitter + conditional GET (304), injectable clock/robots (M9) |
 | Scheduler | `src/druid/scheduler.py` | ✅ `druid run [--once]` per-target cadence + jitter, persisted state, due-only observe, fires alerts, retries failures, restart-safe (M10) |
 | WARC capture | `src/druid/warc.py` | ✅ standards WARC (request+response / resource) via warcio; attested `warc_record_hash`; dependency-free reader replays payload; export ships WARCs (M11) |
-| Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + tabular (M4a) + NetCDF/HDF + zip/xlsx (M4b) |
+| Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + tabular (M4a) + NetCDF/HDF + zip/xlsx (M4b); M12: pint cross-unit, structure-aware table diff, noise suppression, index-column fix |
 | Reviewer aids L3/L5 | `differ/embedding.py`, `triage.py` | ✅ embedding triage + Claude summaries, injectable, outside the trust core (M6) |
 | Federated overlay | `src/druid/overlay.py`, `web/…/overlay.astro` | ✅ third-party archives (Wayback CDX) cross-referenced + attested-badging with downloadable bundles (M7) |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
@@ -50,6 +51,60 @@ M2b–M11 were.
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M12 — Detection precision · built + confirmed 2026-07-12
+
+Cut the misses and false positives the earlier detection layers left. All four refinements
+live **outside the trust core** — the differ's labels are best-effort and human-reviewable,
+never attested — so the risk here is precision, not integrity.
+
+**(a) L2 `pint` cross-unit** (`differ/numeric.py`). A regulatory quantity is now keyed on its
+*context and physical dimension* and compared by magnitude in base units, so `10 ppb` ==
+`0.010 ppm` fires no `NumericThresholdChange` while a real cross-unit move (`10 ppb -> 0.020
+ppm`) is caught. ppb/ppm/ppt are defined as the dimensionless ratios pint doesn't ship;
+anything pint can't parse falls back to a strict same-unit comparison. `pint` is now a **core
+dependency**.
+
+**(b) Structure-aware diff** (`differ/structure.py`, new). L0 flattens a page to one string —
+right for term/numeric watching, but it smears a single table-cell edit into anonymous noise.
+This layer preserves the blocks L0 discards — headings, list items, and **table cells with
+coordinates** — and diffs them, so a one-cell edit is reported as exactly
+`table[0].row[1].col[1]`, `from -> to`. It runs in the differ's fallback position (in place of
+the coarse floor) and declines when a change is too broad to localize (a structural re-index),
+letting the floor summarize. It strips the same page chrome L0 does, so a rotating nav/footer
+never localizes.
+
+**(c) Rendered-DOM noise suppression** (`differ/normalize.py`: `suppress_noise` /
+`normalize_for_diff`). Redacts per-render volatility — ISO date-*times*, and long random
+tokens (nonces / session / trace ids) — *before diffing*, so a re-render that changed nothing
+meaningful fires no diff. Diff-only: the attested bytes and the WARC keep the real, unredacted
+content — the trust core is untouched. (A plain deadline *date* with no time is deliberately
+**not** redacted, so a real deadline move is still caught.)
+
+**(d) L4 index-column fix** (`differ/dataset.py`: `_is_index_like`). A positional row-index
+column (a 0/1-based contiguous run, or a clearly index-y name) is skipped in the distributional
+check, so a truncation flags `row_count` only — never a spurious index-column
+`DistributionalShift`. The guard requires *both* versions to look like an index, so a real
+column that was a 0-based run only *before* a re-baseline is still checked.
+
+**Proof it works.** 16 offline precision tests + the existing numeric/dataset suites. Full
+suite: **161 Python passed** (was 145 at M11), 24 Rust; ruff + mypy + clippy + fmt clean.
+**Live-proven** by driving the real pipeline + Rust ledger with fixture content: cross-unit
+equal/move, a localized `L0-structure` cell edit, a rotating nonce → a faithful leaf with **no
+diff**, and a truncation → `row_count` only — ledger `verify` VALID.
+
+**Adversarial review (2 reviewers × 2 skeptics, 8 findings) — 1 unanimous survivor, fixed.**
+pint misparses `pct` (a percent synonym in `KNOWN_UNITS`) to a `[mass]` dimensionality, so
+`50 percent -> 50 pct` (identical value) tripped a `prev_dim != curr_dim -> return True` branch
+and fired a **High** false alarm. Fixed at the root by the (context, *dimension*) key: a unit
+pint misparses lands under a different key and never cross-fires against its correct sibling —
+which *also* fixed a refuted-but-real regression (dropping the unit from the key would have
+collided two different-dimension thresholds sharing a lead-in phrase, last-win dropping one).
+Three more refuted-but-cheap precision guards were added anyway (structure strips page chrome;
+the index-name list drops the ambiguous `#`/`no`/`no.`; the index guard requires *both*
+versions index-like), each with a regression test. Four other findings were correctly refuted.
 
 ---
 
