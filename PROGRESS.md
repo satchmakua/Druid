@@ -10,15 +10,18 @@ is proven (trust spine: Merkle log, signed checkpoints, RFC 3161 anchors, C2SP t
 M8 witness cosignatures; five-layer detection + render collector + scientific datasets;
 public product: record, RSS, WASM verify, alerts, search, triage, federated overlay).
 **Phase 5–6 (M9–M14) is now the active arc — the "real tool" work**: making Druid actually
-*operate* rather than demo. **M9 (polite collection) and M10 (the scheduler) are built + confirmed.** M9: robots.txt +
-per-host rate-limiting/backoff + conditional GET (proven live against real EPA robots.txt + a
-real 304). M10: `druid run` re-observes the curated set on a per-target cadence, fires alerts
-on new diffs, and survives restarts (proven live — real gov targets + an end-to-end
-scheduler->webhook alert). **Next up: M11** WARC/archive interop, then M12 detection precision
-(pint cross-unit, structure/table-aware diff, rendered-DOM noise), M13 consistency-proof
-gossip + OpenTimestamps, M14 R2 store + Cloudflare deploy + independently-run witness + richer
-curated set + fuzz/scale tests. **No mocks on any production path** — prove each milestone
-live, as M2b–M10 were.
+*operate* rather than demo. **M9 (polite collection), M10 (the scheduler), and M11 (faithful WARC capture) are built +
+confirmed.** M9: robots.txt + per-host rate-limiting/backoff + conditional GET (proven live
+against real EPA robots.txt + a real 304). M10: `druid run` re-observes the curated set on a
+per-target cadence, fires alerts on new diffs, survives restarts (proven live — real gov
+targets + an end-to-end scheduler->webhook alert). M11: each observation is archived as a
+standards **WARC** (request + response) via warcio, attested by `warc_record_hash` and
+recoverable by a warcio-independent reader (proven live — a real EPA fetch → a replayable
+WARC → export ships it). **Next up: M12** detection precision (pint cross-unit,
+structure/table-aware diff, rendered-DOM noise), then M13 consistency-proof gossip +
+OpenTimestamps, M14 R2 store + Cloudflare deploy + independently-run witness + richer curated
+set + fuzz/scale tests. **No mocks on any production path** — prove each milestone live, as
+M2b–M11 were.
 
 ### State of the tree
 
@@ -37,6 +40,7 @@ live, as M2b–M10 were.
 | Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
 | Polite collection | `src/druid/politeness.py` | ✅ robots.txt (Disallow + Crawl-delay) + per-host rate-limit + backoff/jitter + conditional GET (304), injectable clock/robots (M9) |
 | Scheduler | `src/druid/scheduler.py` | ✅ `druid run [--once]` per-target cadence + jitter, persisted state, due-only observe, fires alerts, retries failures, restart-safe (M10) |
+| WARC capture | `src/druid/warc.py` | ✅ standards WARC (request+response / resource) via warcio; attested `warc_record_hash`; dependency-free reader replays payload; export ships WARCs (M11) |
 | Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + tabular (M4a) + NetCDF/HDF + zip/xlsx (M4b) |
 | Reviewer aids L3/L5 | `differ/embedding.py`, `triage.py` | ✅ embedding triage + Claude summaries, injectable, outside the trust core (M6) |
 | Federated overlay | `src/druid/overlay.py`, `web/…/overlay.astro` | ✅ third-party archives (Wayback CDX) cross-referenced + attested-badging with downloadable bundles (M7) |
@@ -46,6 +50,65 @@ live, as M2b–M10 were.
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M11 — Faithful WARC capture + archive interop · built + confirmed 2026-07-12
+
+Make Druid genuinely *interoperable* with the web-archiving/rescue ecosystem (Wayback,
+End-of-Term, EDGI) instead of self-referential. Every observation is now archived as a
+standards **WARC** (ISO 28500) — the faithful capture DESIGN §2/§7 reserved `warc_record_hash`
+for — so a third party can replay exactly what Druid was served, with any archive tool.
+
+**What shipped.** `src/druid/warc.py`, split along the trust boundary:
+
+- **Writing** goes through audited **`warcio`** (now a core dependency): a `static` fetch →
+  a WARC `request` + `response` record pair (payload = the response body); a `render` DOM →
+  a single `resource` record (the honest WARC type for a *derived*, post-JS artifact, not a
+  byte-for-byte HTTP response).
+- **Reading** is a tiny dependency-free parser (`iter_records` / `archived_payload`) so a
+  verifier pulls the archived bytes back out **trusting neither warcio nor Druid** — the same
+  "open, dependency-light verifier" principle as the trust core, and the proof the container
+  is real WARC, not a warcio dialect. (Cross-checked against warcio's own reader in tests.)
+
+**Wiring.** A collector reports a `Capture` (`collectors/base.py`); the pipeline's
+`_archive_warc` builds the WARC **after** the M10 dedup check (so a byte-identical
+re-observation never stores a redundant WARC), stores it content-addressed, and sets
+`warc_record_hash` on the leaf via `dataclasses.replace`. This makes the standing invariant
+hold end to end: **`warc_record_hash == multihash(the stored WARC)`** and **the WARC's
+archived payload hashes to `raw_bytes_hash`** — never advertise a hash a download can't back.
+`druid export` writes `warc/<hash>.warc` (deduped) and `record.json` links each; the
+observation record surfaces `warc_record_hash`.
+
+**Fidelity detail.** httpx transparently decompresses, so the stored payload is the *decoded*
+body; the archived HTTP headers therefore drop `Content-Encoding`/`Transfer-Encoding` and set
+`Content-Length` to the decoded length — otherwise a replayer (Wayback) would try to un-gzip
+plain bytes.
+
+**Proof it works.** 14 offline tests: response + resource WARCs round-trip through the
+independent reader; it agrees with warcio; the encoding headers are reconciled; a body
+containing embedded `CRLFCRLF` and an empty body both round-trip (the header/body split is the
+*first* separator); a pipeline observation is archived + attested (`warc_record_hash` resolves,
+hashes to the WARC, payload hashes to `raw_bytes_hash`); dedup doesn't double-archive; export
+ships + links the WARCs; a render observation is a `resource` WARC replaying the DOM. Full
+suite: **145 Python passed** (was 131 at M10), 24 Rust; ruff + mypy + clippy + fmt clean.
+
+**Live (no mocks on the production path).** `druid observe epa-ghgrp` against the real EPA
+site produced a 64 KB `response`+`request` WARC (`WARC/1.0`, `WARC-Type: response`,
+`WARC-Target-URI`, `WARC-Date`, `WARC-Payload-Digest`, `Content-Type: application/http`) whose
+archived 61 797-byte payload **replays byte-identical and hashes to `raw_bytes_hash`**, with
+`warc_record_hash == multihash(stored WARC)`; `druid export` shipped `warc/<hash>.warc` and
+`record.json` linked it, the shipped file re-hashing correctly.
+
+**Adversarial review (2 reviewers × 2 skeptics) came back clean — 3 findings, all refuted**
+(the two real edges, Content-Encoding fidelity and embedded-`CRLFCRLF` parsing, were fixed
+*before* the review). Three refuted-but-cheap invariants were hardened anyway with regression
+tests: WARC archival is now **best-effort** (a build failure attests the observation *without*
+a WARC rather than losing it — the trust core never depends on the archival feature, and the
+M10 scheduler can't retry-loop a WARC-pathological target forever); `record.json` advertises a
+`warc` download link **only when the blob is actually shippable** (no dangling link — the "never
+advertise an unprovable hash" invariant); and an unknown status code (a Cloudflare 520) keeps
+the RFC-required space in its WARC status line.
 
 ---
 
