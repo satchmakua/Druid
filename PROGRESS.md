@@ -10,14 +10,15 @@ is proven (trust spine: Merkle log, signed checkpoints, RFC 3161 anchors, C2SP t
 M8 witness cosignatures; five-layer detection + render collector + scientific datasets;
 public product: record, RSS, WASM verify, alerts, search, triage, federated overlay).
 **Phase 5–6 (M9–M14) is now the active arc — the "real tool" work**: making Druid actually
-*operate* rather than demo. **M9 (polite collection) is built + confirmed** (robots.txt +
-per-host rate-limiting/backoff + conditional GET; closes the half-met "polite collection"
-hard constraint — proven live against real EPA robots.txt + a real 304). **Next up: M10**
-scheduler (`druid run`, continuous re-observation + auto-firing alerts), then M11 WARC/archive
-interop, M12 detection precision (pint cross-unit, structure/table-aware diff, rendered-DOM
-noise), M13 consistency-proof gossip + OpenTimestamps, M14 R2 store + Cloudflare deploy +
-independently-run witness + richer curated set + fuzz/scale tests. **No mocks on any
-production path** — prove each milestone live, as M2b–M9 were.
+*operate* rather than demo. **M9 (polite collection) and M10 (the scheduler) are built + confirmed.** M9: robots.txt +
+per-host rate-limiting/backoff + conditional GET (proven live against real EPA robots.txt + a
+real 304). M10: `druid run` re-observes the curated set on a per-target cadence, fires alerts
+on new diffs, and survives restarts (proven live — real gov targets + an end-to-end
+scheduler->webhook alert). **Next up: M11** WARC/archive interop, then M12 detection precision
+(pint cross-unit, structure/table-aware diff, rendered-DOM noise), M13 consistency-proof
+gossip + OpenTimestamps, M14 R2 store + Cloudflare deploy + independently-run witness + richer
+curated set + fuzz/scale tests. **No mocks on any production path** — prove each milestone
+live, as M2b–M10 were.
 
 ### State of the tree
 
@@ -35,15 +36,82 @@ production path** — prove each milestone live, as M2b–M9 were.
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher`, conditional-GET headers (M9) |
 | Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
 | Polite collection | `src/druid/politeness.py` | ✅ robots.txt (Disallow + Crawl-delay) + per-host rate-limit + backoff/jitter + conditional GET (304), injectable clock/robots (M9) |
+| Scheduler | `src/druid/scheduler.py` | ✅ `druid run [--once]` per-target cadence + jitter, persisted state, due-only observe, fires alerts, retries failures, restart-safe (M10) |
 | Differ L0/L1/L2/L4 | `src/druid/differ/` | ✅ normalise + term-watch + numeric (M3a) + tabular (M4a) + NetCDF/HDF + zip/xlsx (M4b) |
 | Reviewer aids L3/L5 | `differ/embedding.py`, `triage.py` | ✅ embedding triage + Claude summaries, injectable, outside the trust core (M6) |
 | Federated overlay | `src/druid/overlay.py`, `web/…/overlay.astro` | ✅ third-party archives (Wayback CDX) cross-referenced + attested-badging with downloadable bundles (M7) |
 | Pipeline | `src/druid/pipeline.py` | ✅ collect → store → diff → append |
-| CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`anchor`/`bundle`/`verify-bundle`/`export` |
+| CLI | `src/druid/cli.py` | ✅ `targets`/`observe`/`log`/`verify`/`anchor`/`bundle`/`verify-bundle`/`export`/`notify`/`run` |
 | Public record + feeds | `src/druid/web/`, `web/` (Astro) | ✅ `record.json` + RSS + a browsable static site (M5a) |
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M10 — The scheduler (continuous operation) · built + confirmed 2026-07-12
+
+The milestone that turns Druid from a manual demo into a watchdog that runs *itself*. `druid
+observe <t>` is a one-shot; `druid run` re-observes the curated set on its own, forever,
+politely, and fires alerts the moment a meaningful change lands — no human in the loop. It is
+an application-layer concern: it decides only *when* to observe, never what is attested.
+
+**What shipped.** `src/druid/scheduler.py` — a `Scheduler` over the M9-polite `Druid`:
+
+- **Per-target cadence.** Each target carries an `interval` (`data/targets.toml`, e.g.
+  `"12h"`/`"6h"`/`"1d"`, parsed by `config.parse_duration`); after an attempt the next due
+  time is `now + interval ± jitter` (jitter de-syncs targets off a shared host). The curated
+  set now declares cadences (deletion-risk `usgcrp` every 6 h; the big dataset every 1 d).
+- **Persisted, restart-safe schedule state.** `druid-data/schedule-state.json` records each
+  target's `next_due`/`last_run`/`last_status`/failure-count — written **atomically**
+  (`os.replace`), loaded fail-open (corrupt → start fresh). A restart resumes exactly where it
+  left off; a target observed minutes ago is not re-hit. (The conditional-GET `ETag` stays in
+  the M9 politeness layer — one owner, no second copy to desync.)
+- **Only what is due**, observed through the M9 polite layer; any diffs appended.
+- **Alerts fire on their own.** After each pass the scheduler runs the M5c notify pipeline —
+  idempotent (per-(sub,event) state), so it also retries deliveries that failed earlier.
+- **A failure is retried, not lost.** An observe that raises reschedules the target on a
+  short, capped exponential backoff rather than dropping it until its next full cadence.
+- **Two shapes + a deployment doc.** `druid run --once` (one due-set pass, for cron/systemd)
+  and a long-lived loop (sleeps to the next due time, capped by `--poll`); `docs/deployment.md`
+  ships systemd service/timer, cron, and Docker recipes.
+
+**Companion pipeline change — dedup for sustainable operation.** `observe` now suppresses
+re-logging a **byte-identical** observation (same `http_status` + `raw_bytes_hash` +
+`captured_requests_hash` → `status="unchanged"`, no leaf — the hash-based twin of a `304`).
+Without it, a continuously-running ledger would bloat with identical leaves for any target a
+conditional GET can't spare (a `404`, a server that sends no `ETag`). A status flip
+(`200→451/404`), a captured-requests change, or a reappearance is *not* identical and is
+logged. (`response_headers_hash` is deliberately excluded — the `Date` header changes every
+request, so including it would defeat dedup entirely.)
+
+**Proof it works.** 25 new offline tests (fake wall clock + injected collectors): due
+observed / not-yet-due skipped; a changed page → a diff **and** a notify delivery; schedule
+state survives a restart; `--once` processes exactly the due set; a failed target retried not
+lost; a `304`/identical re-observe → no leaf; jitter offsets `next_due`; the loop is bounded;
+dedup logs a status-flip / reappearance but not a duplicate. Full suite: **131 Python
+passed** (was 107 at M8), 24 Rust; ruff + mypy + clippy + fmt clean.
+
+**Live (no mocks on the production path).** Real `druid run --once` against real EPA targets:
+first pass observed both (one turned up a real `[404]` — `epa-climate-indicators` — faithfully
+attested); a second pass re-observed on cadence and returned `304`/dedup with **no ledger
+growth** across three runs (`verify` VALID, 2 entries). And an **end-to-end
+scheduler→real-webhook** run (real local origin + real `HttpWebhookNotifier` httpx POST):
+after the page changed, the scheduler detected 2 diffs (TermSubstitution + NumericThresholdChange,
+both High) and fired **2 real `druid.alert/v1` webhooks** — the whole watchdog reflex, live.
+
+**Adversarial review (2 reviewers × 2 skeptics) hardened two real long-running-service bugs**,
+both fixed with regression tests: (1) **a corrupt `notify-state.json` could kill the entire
+`run` loop** — the M10 loop calls notify every tick, and `notify.load_state` had the same
+unguarded-`json.loads` + non-atomic-write flaw M9/schedule state already fixed; now fail-open
++ atomic, and `run_due` isolates the notify pass so no alert failure ever stops the watchdog.
+(2) **the retry backoff overflowed** — a permanently-dead target (a takedown — exactly what
+Druid watches for) would grow `2**failures` until `OverflowError` (~1025 failures, ~6 weeks)
+crashed the loop; the exponent is now clamped (behaviourally identical, the delay is capped
+regardless). Also hardened: `parse_duration` rejects a non-positive/non-finite interval (a
+config typo would otherwise hot-spin the loop). Four other findings were correctly refuted
+(excluding `response_headers_hash`/`url` from dedup is intentional; a status-only change logs
+the observation without a diff by design).
 
 ---
 
