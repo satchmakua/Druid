@@ -1,4 +1,8 @@
-# PROGRESS — Druid
+# PROGRESS — Annals
+
+**2026-07-15 — Renamed Druid to Annals.** Full product rename: PyPI/package name `annals`,
+`python -m annals`, Rust binaries `annals-ledger`/`annals-verify`, runtime dir `annals-data/`,
+schema/origin strings `annals.*`, web copy + repo `satchmakua/annals`. Older entries below keep "Druid" — history stays history.
 
 A build log of what shipped and the notable decisions behind it. **Keep it honest** —
 this is the working memory between build sessions. The forward-looking plan and
@@ -20,11 +24,13 @@ reader (proven live — a real EPA fetch → a replayable WARC → export ships 
 precision — pint cross-unit numerics (10 ppb == 0.010 ppm), structure/table-aware localized
 diffs, rendered-DOM noise suppression, and the L4 index-column truncation fix. **M13a**
 (consistency-proof gossip) proves a later checkpoint extends an earlier one — offline
-fork/shrink/equivocation detection, the trust-core complement to M8 witnesses. **Next up:
-M14** (R2 store + Cloudflare deploy + independently-run witness + richer curated set +
-fuzz/scale tests), with **M13b (OpenTimestamps) deferred** pending a real Bitcoin-confirmed
-fixture. **No mocks on any production path** — prove each milestone live, as
-M2b–M13a were (which is exactly why M13b waits rather than ships a synthetic OTS).
+fork/shrink/equivocation detection, the trust-core complement to M8 witnesses. **M14d-1**
+(property/fuzz + scale hardening) proves the differ + WARC reader are *total* on untrusted
+bytes and the Merkle log's proofs stay O(log n) at 100k leaves. **Next up: the rest of M14**
+(R2 store adapter, Cloudflare deploy + mirrors, an independently-run witness, a richer curated
+set), with **M13b (OpenTimestamps) deferred** pending a real Bitcoin-confirmed fixture. **No
+mocks on any production path** — prove each milestone live, as M2b–M14d-1 were (which is
+exactly why M13b waits rather than ships a synthetic OTS).
 
 ### State of the tree
 
@@ -40,6 +46,7 @@ M2b–M13a were (which is exactly why M13b waits rather than ships a synthetic O
 | Tile serving | `Ledger::write_tiles` + `druid-verify tiles` | ✅ C2SP tiles published on append; proofs reconstruct from tiles alone (M2c) |
 | RFC 3161 anchoring | `rust/…/rfc3161.rs`, `src/druid/anchors.py` | ✅ offline verify (RSA/ECDSA P-256/384/521), real DigiCert+FreeTSA TSAs, pinned roots (M2b-1/2) |
 | Consistency gossip | `rust/…/lib.rs` `verify_consistency`, `pipeline.gossip_bundle` | ✅ `druid-verify consistency` — offline fork/shrink/equivocation detection under a pinned key; export consistency chain (M13a) |
+| Property/fuzz + scale | `tests/test_fuzz.py`, `rust/…/tests/scale.rs` | ✅ Hypothesis fuzzing (differ + WARC reader total on untrusted bytes) + 100k-leaf log scale test, proofs O(log n) (M14d-1) |
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher`, conditional-GET headers (M9) |
 | Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
 | Polite collection | `src/druid/politeness.py` | ✅ robots.txt (Disallow + Crawl-delay) + per-host rate-limit + backoff/jitter + conditional GET (304), injectable clock/robots (M9) |
@@ -54,6 +61,47 @@ M2b–M13a were (which is exactly why M13b waits rather than ships a synthetic O
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M14d-1 — Property/fuzz + scale hardening · built + confirmed 2026-07-13
+
+The first slice of M14, and the one that most directly serves the project's thesis — *correct
+under complexity, and I can prove it*. It needs no credentials, so it's done first while the
+deploy-shaped slices (R2, Cloudflare, mirrors, witness) wait. Two properties are put under
+adversarial and scale pressure.
+
+**The differ + WARC reader are *total* on untrusted bytes** (`tests/test_fuzz.py`, Hypothesis,
+250 examples each). Everything that ingests what a government site or a third-party archive
+serves — `dataset_diff`, `structure_watch`, `normalize_for_diff`, `detect_format`, `term_watch`,
+`numeric_watch`, and the dependency-free `warc.iter_records` — must never crash, hang, or
+mis-behave on arbitrary/malformed input, only ever return a result or a *controlled* error. The
+fuzz corpus confirms it: the differ always returns a (possibly empty) `list[DiffRecord]` (a
+parse failure degrades to a `MetadataChange`, never a raise); the WARC reader raises only a
+typed `ValueError` on malformed bytes (hardened this milestone: a missing / non-integer /
+negative `Content-Length` is now a clean `ValueError`, not a `KeyError`); `suppress_noise` is
+idempotent; comparing byte-identical content yields no spurious diff for *any* bytes; and a
+written WARC round-trips *any* payload (the M11 invariant, quantified over arbitrary bytes,
+including payloads that embed `CRLFCRLF`).
+
+**The Merkle log holds its invariants at scale** (`rust/…/tests/scale.rs`). A modest always-run
+test (2 000 leaves) exercises the full O(n) re-verification plus the proof invariants; a
+`#[ignore]`d 100k-leaf test proves the same at production size without slowing every build. At
+100k: every spot-checked leaf's inclusion proof verifies against the *signed checkpoint* (and a
+forged record at the same index does not), a consistency proof between an interior prefix and
+the full tree holds, the proofs stay **O(log n)** (bounded and asserted — a regression to a
+linear proof is caught), and gossip across the whole life of the log (`verify_consistency` from
+size 10 to 100 000) confirms `extends size 10`. The scale signal is *structural*, not
+wall-clock — timings are printed for information but never asserted (an early draft asserted a
+time budget and flaked when the test box slept mid-run, counting ~14 h of suspend into
+`Instant::elapsed`; the correctness invariants held throughout — only the wall-clock assert
+tripped, so it was removed).
+
+**Verification.** ruff + mypy clean; **177 Python passed** (+10 fuzz/property, at 250 examples
+each); the Rust core + always-run scale suites green (`cargo test`), and the 100k invariants
+verify under `cargo test -- --ignored`. No adversarial-review workflow this slice: the diff is
+~all tests plus a 6-line error-contract hardening of the WARC reader — the fuzz corpus *is* the
+adversarial check, and it found the input space clean.
 
 ---
 
