@@ -18,11 +18,13 @@ scheduler->webhook alert). M11: each observation is archived as a standards **WA
 + response) via warcio, attested by `warc_record_hash` and recoverable by a warcio-independent
 reader (proven live — a real EPA fetch → a replayable WARC → export ships it). M12: detection
 precision — pint cross-unit numerics (10 ppb == 0.010 ppm), structure/table-aware localized
-diffs, rendered-DOM noise suppression, and the L4 index-column truncation fix. **Next up:
-M13** consistency-proof gossip + OpenTimestamps, then M14 R2 store + Cloudflare deploy +
-independently-run witness + richer curated
-set + fuzz/scale tests. **No mocks on any production path** — prove each milestone live, as
-M2b–M12 were.
+diffs, rendered-DOM noise suppression, and the L4 index-column truncation fix. **M13a**
+(consistency-proof gossip) proves a later checkpoint extends an earlier one — offline
+fork/shrink/equivocation detection, the trust-core complement to M8 witnesses. **Next up:
+M14** (R2 store + Cloudflare deploy + independently-run witness + richer curated set +
+fuzz/scale tests), with **M13b (OpenTimestamps) deferred** pending a real Bitcoin-confirmed
+fixture. **No mocks on any production path** — prove each milestone live, as
+M2b–M13a were (which is exactly why M13b waits rather than ships a synthetic OTS).
 
 ### State of the tree
 
@@ -37,6 +39,7 @@ M2b–M12 were.
 | Proof bundle | `pipeline.bundle` + `verify_bundle` (Rust) | ✅ `druid.proofbundle/v1`, offline-verified (M2a) |
 | Tile serving | `Ledger::write_tiles` + `druid-verify tiles` | ✅ C2SP tiles published on append; proofs reconstruct from tiles alone (M2c) |
 | RFC 3161 anchoring | `rust/…/rfc3161.rs`, `src/druid/anchors.py` | ✅ offline verify (RSA/ECDSA P-256/384/521), real DigiCert+FreeTSA TSAs, pinned roots (M2b-1/2) |
+| Consistency gossip | `rust/…/lib.rs` `verify_consistency`, `pipeline.gossip_bundle` | ✅ `druid-verify consistency` — offline fork/shrink/equivocation detection under a pinned key; export consistency chain (M13a) |
 | Static collector | `src/druid/collectors/static.py` | ✅ httpx fetch, injectable `Fetcher`, conditional-GET headers (M9) |
 | Render collector | `src/druid/collectors/render.py` | ✅ Playwright headless DOM + captured API/data calls, injectable `RenderEngine` (M3b) |
 | Polite collection | `src/druid/politeness.py` | ✅ robots.txt (Disallow + Crawl-delay) + per-host rate-limit + backoff/jitter + conditional GET (304), injectable clock/robots (M9) |
@@ -51,6 +54,56 @@ M2b–M12 were.
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
 | Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+
+---
+
+## M13a — Consistency-proof gossip · built + confirmed 2026-07-12
+
+The trust-core answer to an **equivocating operator** (Adversary B), complementing M8's
+witnesses: a client that saw an earlier signed checkpoint can confirm — offline, trusting
+neither the operator nor a live service — that a later one is the *same* append-only log,
+never forked, shrank, or rewrote history. This completes the consistency half of M13; the
+OpenTimestamps half (M13b/M2b-3) is deferred (see below).
+
+**What shipped.** `verify_consistency` in `rust/ledger-core/src/lib.rs` + a `druid-verify
+consistency` subcommand: it verifies both signed checkpoints under a pinned Ed25519 key,
+parses each `(size, root)`, and runs the C2SP `check_tree` that the size-`t` tree with root
+`th` extends the size-`n` tree with root `h` — no bespoke crypto. Three edge cases `check_tree`
+doesn't cover are decided directly, each a real gossip outcome: the empty tree is a prefix of
+anything; a smaller "new" size means the log **shrank** (reject); two different roots at the
+**same** size is an **equivocation** (reject). Python: `Ledger.consistency_proof` /
+`verify_consistency` shell out over stdio; `Druid.gossip_bundle(old_checkpoint)` assembles a
+self-contained `druid.consistency/v1` (both checkpoints + the proof + the pinned key); `druid
+consistency` (self-gossip, advances a baseline) and `druid verify-consistency` (verify a
+downloaded bundle) are the CLI surface; `druid export` publishes a **rolling consistency
+chain** (`consistency.json` linking each export's checkpoint to the prior published one) — the
+gossip carrier a static site needs.
+
+**Proof it works.** 6 Python + 2 Rust tests: a real proof confirms an extension; a shrink, an
+equivocation (two roots at one size, same key), and a forged/mismatched proof are all rejected;
+the export chain verifies; the CLI binds to a pinned key. Full suite: **167 Python passed** (was
+161 at M12), **26 Rust** (was 24); ruff + mypy + clippy + fmt clean. **Live-proven** against the
+real Rust trust core: `gossip_bundle` over a size-1→size-5 log → `CONSISTENT … no fork or
+rewrite`; swapping old/new → `INCONSISTENT … the log shrank`; a wrong pinned key → rejected
+before the proof even runs.
+
+**Adversarial review (2 reviewers × 2 skeptics, trust-core bar) — 0 survivors (5 findings, all
+refuted)**: no soundness bug (the `check_tree` argument order, the edge-case branches, and the
+equivocation detection are correct). Four refuted-but-real robustness/soundness *improvements*
+were applied anyway with regression tests: (1) the client `verify-consistency` now binds to a
+**pinned `--pubkey`** — verifying a bundle under the key it carries proves only internal
+consistency, not that it is Druid's real log, so a wrong pinned key is rejected up front; (2)
+`export` and `druid consistency` use **separate baseline markers** (they no longer consume each
+other's gossip chain); (3) `export` **verifies the bundle before publishing** and advances the
+chain only on success (never ship a broken proof / silently advance past a fork); (4) a corrupt
+baseline marker **fails open** to a re-baseline instead of crashing.
+
+**M13b — OpenTimestamps (M2b-3) — deferred, honestly.** A faithful OTS anchor needs a
+*Bitcoin-confirmed* `.ots` proof (hours of confirmation latency), so — unlike M2b's instant
+RFC 3161 TSAs — it can't be live-proven in a session without a synthetic fixture, which this
+arc's "no mocks on a production path" rule forbids. Real time bounds already exist via M2b's
+independent TSAs; OTS is the incremental, maximally-adversary-resistant addition, to be built
+as a focused slice against a real confirmed fixture rather than faked here.
 
 ---
 
