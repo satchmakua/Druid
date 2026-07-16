@@ -1,8 +1,10 @@
-# PROGRESS — Annals
+# PROGRESS — Verderer
 
-**2026-07-15 — Renamed Druid to Annals.** Full product rename: PyPI/package name `annals`,
-`python -m annals`, Rust binaries `annals-ledger`/`annals-verify`, runtime dir `annals-data/`,
-schema/origin strings `annals.*`, web copy + repo `satchmakua/annals`. Older entries below keep "Druid" — history stays history.
+**2026-07-15 — Renamed Druid to Verderer.** Full product rename: PyPI/package name `verderer`,
+`python -m verderer`, Rust binaries `verderer-ledger`/`verderer-verify`, runtime dir `verderer-data/`,
+schema/origin strings `verderer.*`, web copy + repo `satchmakua/verderer`. (An intermediate name
+"Annals" was chosen and superseded the same day — Verderer is a medieval royal-forest guardian, the
+environmental-keeper sense Druid carried.) Older entries below keep "Druid" — history stays history.
 
 A build log of what shipped and the notable decisions behind it. **Keep it honest** —
 this is the working memory between build sessions. The forward-looking plan and
