@@ -66,6 +66,62 @@ exactly why M13b waits rather than ships a synthetic OTS).
 
 ---
 
+## M14a — R2/S3 store adapter · built + confirmed 2026-07-16
+
+The blob store becomes a real port: dev = filesystem, prod = **any S3-compatible bucket**.
+Deliberately *S3-compatible* rather than R2-specific — Cloudflare R2, Backblaze B2, AWS S3 and a
+self-hosted MinIO all speak the same API, so the vendor is a config line and Verderer is never
+welded to one provider's console. (The ROADMAP said "R2"; this is the same slice, less locked-in.
+It also meant the owner needed no Cloudflare account to get this proven.)
+
+**What shipped.** `store.BlobStore` makes the port explicit (`put`/`get`/`has`);
+`store_s3.S3Store` implements it over boto3 with keys mirroring the filesystem store's sharded
+layout (`<prefix><aa>/<digest>`), so a bucket and a data dir are inspectably the same shape and
+either can be mirrored into the other. `store_from_env` selects the backend from the environment
+(`VERDERER_STORE=s3` + `VERDERER_S3_*`), credentials from env only so none can land in a file or
+a commit; `Verderer(store=…)` injection still wins for tests. boto3 is an optional `s3` extra —
+the filesystem store backs dev and every offline test.
+
+**Why a third-party bucket is an acceptable production dependency** — and why the ledger isn't.
+A blob is only ever *referenced by hash* from an attested leaf, and a proof bundle re-hashes the
+bytes it carries. A store that serves wrong bytes, loses an object, or is seized therefore
+**cannot forge history**: the hash won't match and verification fails closed. Its honesty is
+*checkable*, so it needn't be trusted — which is exactly the property the Merkle log lacks, and
+why that stays in the Rust kernel behind signed checkpoints, witnesses, and anchors.
+
+**Proof it works.** The port contract (`put` returns `multihash(bytes)`, `get(put(b)) == b`,
+`has` true iff `get` would succeed, `put` idempotent) is written **once and parameterized over
+every backend**, so an adapter cannot quietly drift from the filesystem store the whole pipeline
+was built on. The S3 half runs against a **real S3 server** — a local MinIO — never a mock: a
+mock would only re-assert the adapter's own assumptions about S3 instead of testing S3. It skips
+cleanly when no server is configured, and points at any hosted bucket via `VERDERER_S3_*`.
+**196 Python passed** (+12), ruff + mypy clean.
+
+**Live (the M14a acceptance).** The full pipeline ran **unchanged** against real S3 — the only
+difference from a normal run being `store=S3Store`: two observations of a changing page →
+`TermSubstitution` + `NumericThresholdChange`, four real content-addressed objects in the bucket
+(`live/5b/5bea…`), `verify` VALID at 4 entries, the **proof bundle's artifact fetched from S3
+hashes to the attested leaf**, and the **M11 WARC replays out of S3** with its payload matching.
+
+**Adversarial review — and it caught this slice's headline claim being false.** The reviewers
+(who had the live MinIO to probe, so they settled S3 semantics empirically rather than
+speculating) proved that **the S3 contract never ran in CI**: `boto3` lived only in the `s3`
+extra while `ci.yml` installs `.[dev]`, so `importorskip` skipped the whole S3 suite and the run
+went green having exercised only the filesystem backend. They demonstrated it by mutation —
+break `_key`'s sharding or add `403` to the `has()` swallow list, and **CI merges green**. That
+falsified, in CI, the exact load-bearing sentence written into `store.py`, `store_s3.py`,
+`test_store.py` *and* the ROADMAP: *"one contract suite runs against every backend, so an
+adapter can't quietly differ."* The adapter was genuinely live-proven here, so the M14a claim
+wasn't fabricated — but the safety net didn't exist where it gates *other people's* PRs, which
+is the only place it really has to. Fixed on all three legs the reviewers identified, each
+verified: `boto3` moved into `dev`; `ci.yml` now runs a **real MinIO service** and points the
+contract at it; and `VERDERER_REQUIRE_S3=1` makes a missing server a **failure** rather than a
+skip — because in CI a silent skip is indistinguishable from a pass. Confirmed both directions:
+with the server the S3 contract runs (13/13); pointed at a dead endpoint under the flag, the
+suite goes **red** instead of quietly green.
+
+---
+
 ## M14c — Independently-run `verderer-witness` · built + confirmed 2026-07-16
 
 The slice that turns M8 from an **in-process demo** into **real multi-party gossip**. M8 proved
