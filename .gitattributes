@@ -1,0 +1,4 @@
+# Served bytes must be EXACTLY the built bytes: several files are content-addressed
+# (warc/<hash>.warc, tile files) or signature-covered (checkpoint), so ANY line-ending
+# normalization is silent corruption. Treat everything as binary.
+* -text
