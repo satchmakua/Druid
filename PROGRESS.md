@@ -66,6 +66,68 @@ exactly why M13b waits rather than ships a synthetic OTS).
 
 ---
 
+## M14c — Independently-run `verderer-witness` · built + confirmed 2026-07-16
+
+The slice that turns M8 from an **in-process demo** into **real multi-party gossip**. M8 proved
+the cosignature *format*; the operator still held every witness key, so a quorum proved nothing
+an operator couldn't fake alone. Now a third party actually runs the witness — and can say no.
+
+**What shipped.** `WitnessService` (`witness.py`) + a `verderer-witness` console script
+(`witness_cli.py`), deployable by someone who is not the operator. It holds **its own key**,
+keeps **its own memory** of the log (the last checkpoint it accepted, written atomically), pins
+the log's public key **out-of-band**, and needs **no operator ledger** — it is handed only a
+checkpoint (and a consistency proof) fetched from wherever the log is published, by path or
+URL. It cosigns only what it can confirm: the note must be validly signed by the *pinned* key
+**and** must extend what this witness last accepted (M13a's consistency proof). Otherwise it
+**refuses**, with the reason, exit 1. Supporting pieces: `verderer-ledger cosign` now reads the
+checkpoint from **stdin** when given no `--dir` (a witness has no ledger to read), and
+`verify_consistency_offline` / `cosign_checkpoint_offline` were extracted so both work with no
+ledger directory at all. `Verderer.ingest_cosignature(line, name)` lets the operator **file an
+independent witness's vouch** into a bundle — without ever holding that witness's key, which is
+precisely what makes a quorum worth something.
+
+**Proof it works.** 5 offline tests: the witness cosigns a checkpoint it can verify and a
+genuine extension; **refuses an equivocating log** (same key, same size, different root);
+**refuses a log signed by an unpinned key**; and an operator-filed independent vouch reaches
+the bundle. Full suite: **182 Python passed** (was 177), 27 Rust; ruff + mypy + clippy + fmt
+clean. **Live-proven as a genuinely separate process**: `verderer-witness --checkpoint … --pubkey
+… --key-file …` (its own key + state, no operator ledger) cosigned the published checkpoint and
+printed its pin; the operator filed the line; `verderer-verify bundle --witness <pin> --quorum 1`
+→ **VALID**, `--quorum 2` → **INVALID: quorum not met**; and when shown an equivocating
+checkpoint the witness **REFUSED** — *"two different roots at the same size 1 — the log
+equivocated (a fork)"*, exit 1.
+
+**Adversarial review (2 reviewers × 2 skeptics) — 9 findings, 3 survivors; it earned its keep,
+catching a HIGH hole the live demo happily passed over.**
+
+1. **(HIGH, fixed) A downgrade attack via the witness's own memory.** `last_accepted()` caught
+   `OSError` and returned `None`, which `observe()` read as a legitimate *first sighting* — the
+   bootstrap branch, which checks only the signature and **skips the fork check**. One transient
+   I/O fault (a file lock, an AV scan, an NFS blip; `Path.exists()` also reports False when
+   `stat` raises) and the witness would **cosign the very fork it had just refused**, then
+   `_remember` it — permanently adopting the attacker's history. The reviewers reproduced it end
+   to end. The bug was a pattern misapplied: fail-*open* is right for a courtesy cache
+   (politeness/notify state), and exactly wrong for a security-critical memory. Now
+   `last_accepted` distinguishes *absent* (`FileNotFoundError` → bootstrap) from *unreadable*
+   (propagates → `observe` **fails closed** and refuses), with no `exists()` pre-check to
+   smuggle it back in. Regression test included.
+2. **(medium, fixed) A vouch filed against the wrong checkpoint.** `ingest_cosignature` filed a
+   line under whatever checkpoint was current *at ingest time*, never the one it covers, and
+   never checked — so a routine race (the log grows between cosign and ingest) silently produced
+   a bundle whose quorum can never hold, while reporting success. It failed *closed* at verify
+   time (`verify_bundle` re-derives the note body and re-verifies each line, so no vouch is
+   forged), but nothing surfaced it. `WitnessObservation` now carries the checkpoint it signed,
+   and `ingest_cosignature(..., covers=…)` rejects a stale vouch loudly. Regression test included.
+3. **(medium, known limitation — not fixed here)** The `--proof` flow consumes the site's
+   `consistency.json`, whose proof bridges the *export's* baseline to current — **not** the
+   witness's own last-accepted checkpoint. A witness that misses a single export is wedged: it
+   refuses an honest log forever (fails *closed*, so it's safe, never unsound — but that
+   witness can no longer contribute to a quorum). The real fix is a proof from the witness's own
+   size — an on-demand endpoint (M14b's read API) or reconstructing one from the published M2c
+   tiles. Recorded here rather than papered over.
+
+---
+
 ## M14d-1 — Property/fuzz + scale hardening · built + confirmed 2026-07-13
 
 The first slice of M14, and the one that most directly serves the project's thesis — *correct
