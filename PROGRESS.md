@@ -66,6 +66,35 @@ exactly why M13b waits rather than ships a synthetic OTS).
 
 ---
 
+## M14b-1 — Live public deploy · confirmed 2026-07-16
+
+**The record is live: `https://verderer.satchelhamilton.com`.** GitHub Pages + the owner's
+Porkbun domain (one CNAME record: `verderer` → `satchmakua.github.io`) — a deliberate deviation
+from the ROADMAP's "Cloudflare Pages": the site is static files, so any host serves it, and this
+needed no new account and no vendor lock. The `gh-pages` branch carries the built Astro site
+plus the record, feeds, tiles, checkpoint, fresh proof bundles, and WARCs; Pages was enabled and
+the custom domain + **Enforce HTTPS** set via the GitHub API once the cert issued.
+
+**The deploy's own integrity had to be defended twice.** (1) git's line-ending normalization
+**silently corrupted the content-addressed WARCs** on the first push (WARCs carry protocol
+CRLFs; the EOL warnings were the tell). Fixed with a `* -text` `.gitattributes` — shipped from
+`web/public/` so every build carries it structurally — then *proven*: every committed WARC blob
+re-hashed byte-exact to its filename. (2) The live site was serving **stale pre-rename bundles**
+(`druid.proofbundle/v1` relics committed in an old era) that failed verification — replaced with
+fresh bundles for the live ledger and removed from the source repo. Both catches are the same
+lesson: a publish pipeline is part of the integrity surface.
+
+**Acceptance, proven against the live site (no mocks).** The curated set was observed live
+(3 real EPA fetches with WARCs; `globalchange.gov` failed DNS — the deletion-watch target
+behaving exactly as its criteria anticipated, retried by the scheduler, never lost). Then the
+skeptical-third-party loop end to end: `record.json`, the `checkpoint`, a proof bundle, and a
+WARC **downloaded from `verderer.satchelhamilton.com`** → `verderer-verify bundle` returns
+**`VALID bundle OK`** offline, and the WARC hashes byte-exact to its content-addressed name.
+`http://` 301-redirects; `https://` serves 200 with the cert approved. Remaining as **M14b-2**:
+the FastAPI read surface and checkpoint mirroring to ≥2 independent mirrors + Wayback.
+
+---
+
 ## M14a — R2/S3 store adapter · built + confirmed 2026-07-16
 
 The blob store becomes a real port: dev = filesystem, prod = **any S3-compatible bucket**.
