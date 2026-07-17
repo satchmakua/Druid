@@ -62,7 +62,41 @@ exactly why M13b waits rather than ships a synthetic OTS).
 | Public record + feeds | `src/druid/web/`, `web/` (Astro) | ✅ `record.json` + RSS + a browsable static site (M5a) |
 | In-browser verifier | `rust/ledger-wasm/`, `web/…/verify.astro` | ✅ `ledger-core`→WASM; verifies a bundle in the browser (M5b) |
 | Push alerts + search | `src/druid/notify.py`, `web/…/index.astro` | ✅ webhook + email by target/type/severity; client-side search (M5c) |
-| Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 3 targets, 10 watched terms |
+| Curated data | `data/targets.toml`, `data/terms.toml` | ✅ 12 justified targets (criteria published; removed resources = deletion watches) + 23 terms (M14d-2) |
+
+---
+
+## M14d-2 — Richer curated set · confirmed 2026-07-17 — **THE PHASE 5–6 ARC IS COMPLETE**
+
+The last M14 slice: the curated set grows from 5 to **12 justified targets** and the L1
+dictionary from 10 to **23 terms**, with the curation criteria **published** in the data files
+themselves (criteria tags `[mandate][threshold][history][removed][traffic]` per target;
+inclusion rules for terms — documented erasure precedent or legally-loaded regulatory wording).
+
+**Curation was live-verified, and the check itself is the project's thesis in miniature:** at
+curation time (2026-07-17), **half the canonical climate/EJ record was already gone** —
+`epa.gov/climate-indicators` 404, `globalchange.gov` and the NCA5 site DNS-dead, `climate.gov`
+403 (redirected to `noaa.gov/climate`), EJScreen and CEJST dead. Those stay in the set as
+**deletion/reappearance watches**: the watchdog attests continued absence, and a reappearance
+or replacement is itself a high-signal event. New living targets: the EPA drinking-water **MCL
+table** (the canonical L2 numeric-threshold page), the glyphosate registration review, the
+NOAA **Keeling curve** page, USDA Climate Hubs, and the FEMA National Risk Index.
+
+**A politeness catch worth recording:** the Keeling raw CSV (`/webdata/…/co2_mm_mlo.csv`) was
+initially curated as an L4 dataset target — and the M9 layer **refused to fetch it**, because
+NOAA's robots.txt disallows `/webdata/` for all agents. That is the hard constraint doing its
+job, so the CSV was dropped and the criteria note why: the trends *page* (which carries the
+current monthly values inline, and is robots-permitted) is the polite watch.
+
+**Live proof.** Through the real pipeline: the MCL page observed (`[200]`, first leaf), the
+Keeling page observed (`[200]`), and `climate.gov` observed with a **faithfully attested
+`403`** — the access-block is now cryptographically on the record. Ledger VALID; full suite
+green (config, pipeline, scheduler untouched — this slice is data + criteria, zero code).
+
+**With this, every Phase 5–6 milestone is confirmed** (M9 politeness, M10 scheduler, M11 WARC,
+M12 precision, M13a gossip, M14a S3 store, M14b live deploy + mirrors, M14c independent
+witness, M14d fuzz/scale + curated set). The one open item across the whole roadmap is M13b
+(OpenTimestamps), deferred for a real Bitcoin-confirmed fixture.
 
 ---
 
