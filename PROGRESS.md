@@ -66,6 +66,35 @@ exactly why M13b waits rather than ships a synthetic OTS).
 
 ---
 
+## M14b-2 — Read surface + checkpoint mirroring · confirmed 2026-07-17
+
+Completes M14b. Two decisions, one live proof.
+
+**The read API is the static JSON surface.** `record.json`, the RSS feeds, the C2SP tiles, the
+proof bundles, and the signed `checkpoint` are already machine-readable endpoints over HTTPS on
+the live site. A FastAPI service (the ROADMAP's original sketch) would add a process to run,
+patch, and trust — for zero new capability over the static files. M5c had already recorded that
+the static export covers the read need; this slice makes the deviation explicit and final.
+
+**Mirroring makes the checkpoint survivable** (`src/verderer/mirror.py`, `verderer mirror
+[--verify]`). A checkpoint only constrains the operator if copies exist *outside the operator's
+control*. Each run submits the live checkpoint URL to the **Wayback Machine** (Save Page Now)
+and the whole git repo — including `gh-pages`, which carries every published checkpoint, tile,
+bundle, and WARC — to **Software Heritage** (Save Code Now). No accounts, no keys; fail-soft per
+mirror (one archive down never blocks the other); injectable HTTP so tests run offline; a
+redundancy layer, never the trust core (the mirrored bytes are already signed/content-addressed
+— mirrors add survivability and independent timestamps, not authority).
+
+**Live proof (no mocks).** `verderer mirror --verify` against the real archives: Wayback
+captured a snapshot (`web/20260717152621/…/checkpoint`), Software Heritage accepted the repo,
+and the round-trip check fetched the archived checkpoint back via Wayback's identity URL
+(`0id_/` — original bytes, no replay banner) and confirmed it **byte-identical to the live
+checkpoint**. 5 offline tests; full suite green (201 passed; the S3 contract skips locally with
+MinIO stopped and is enforced in CI). Operational note: `verderer mirror` after each
+export/deploy — documented in `docs/deployment.md`.
+
+---
+
 ## M14b-1 — Live public deploy · confirmed 2026-07-16
 
 **The record is live: `https://verderer.satchelhamilton.com`.** GitHub Pages + the owner's
