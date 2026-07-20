@@ -66,6 +66,34 @@ exactly why M13b waits rather than ships a synthetic OTS).
 
 ---
 
+## Rename cleanup — the live site said "Annals" · fixed + redeployed 2026-07-20
+
+The Druid → Annals → Verderer double rename (2026-07-15) missed the web templates: the live
+site's wordmark, page titles, RSS link title, and footer still read **ANNALS**, and three pages
+carried the sed artifact **"Verderer'"** (a mangled `Annals'` possessive). Fixed in
+`web/src/` (wordmark/titles/footer/possessives), plus non-web stragglers: the package
+docstring, `ledger-wasm`'s crate description, two `rfc3161.rs` doc comments, and the stale
+`annals-web` name in `package-lock.json`. `PROGRESS.md`'s note *about* the rename keeps the
+old names — history stays history.
+
+**Deploy was surgical, not a re-export.** The site HTML was rebuilt against the **live**
+`record.json`/`overlay.json` (pulled from `origin/gh-pages`, not the local export — the local
+ledger has moved past the deployed record) and only the 8 HTML pages were committed onto
+`gh-pages` (fast-forward, no force): a pre-push diff confirmed the rebuilt pages are
+byte-identical to the live ones except the name strings, and every attested artifact
+(checkpoint, tiles, bundles, WARCs, `sample-proof.json`, wasm) is untouched. Old-name strings
+*inside* published data artifacts (`overlay.json`'s schema tag, the old wasm build) were left
+byte-exact on purpose — rewriting published bytes is exactly what this project forbids; they
+regenerate on the next real export.
+
+**Found while deploying:** the M15 `watch` workflow is scheduled and has been **failing every
+6 h in ~11 s** — `VERDERER_SIGNING_KEY` secret is not set (confirmed in the Actions log). Until
+the owner sets the secret (and seeds the `state` branch if the existing local ledger identity
+is to continue), the live record stays the 2026-07-17 5-target snapshot; the 12-target M14d-2
+set has never been deployed. Full suite green (ruff, mypy, pytest; cargo fmt/clippy/test).
+
+---
+
 ## M14d-2 — Richer curated set · confirmed 2026-07-17 — **THE PHASE 5–6 ARC IS COMPLETE**
 
 The last M14 slice: the curated set grows from 5 to **12 justified targets** and the L1
