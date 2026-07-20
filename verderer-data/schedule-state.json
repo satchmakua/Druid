@@ -36,24 +36,24 @@
       "target_id": "epa-climate-indicators"
     },
     {
-      "consecutive_failures": 1,
-      "last_run": 1784559997.903386,
+      "consecutive_failures": 2,
+      "last_run": 1784577411.5063698,
       "last_status": "error",
-      "next_due": 1784560297.903386,
+      "next_due": 1784578011.5063698,
       "target_id": "epa-ejscreen"
     },
     {
-      "consecutive_failures": 1,
-      "last_run": 1784560007.0027013,
+      "consecutive_failures": 2,
+      "last_run": 1784577419.8237736,
       "last_status": "error",
-      "next_due": 1784560307.0027013,
+      "next_due": 1784578019.8237736,
       "target_id": "usgcrp"
     },
     {
-      "consecutive_failures": 1,
-      "last_run": 1784560073.170563,
+      "consecutive_failures": 2,
+      "last_run": 1784577486.9917004,
       "last_status": "error",
-      "next_due": 1784560373.170563,
+      "next_due": 1784578086.9917004,
       "target_id": "nca5"
     },
     {
