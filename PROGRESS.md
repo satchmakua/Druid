@@ -66,6 +66,46 @@ exactly why M13b waits rather than ships a synthetic OTS).
 
 ---
 
+## M15 bootstrap — the watchdog now runs itself in the cloud · 2026-07-20 (tick pending one cron-fired run)
+
+The owner minted a fresh instance key straight into the `VERDERER_SIGNING_KEY` secret (per
+`docs/deployment.md` — "whoever holds it IS the log operator"); the public key
+(`5ba707a9…a52a24db`, origin `verderer.watchdog/m1-log`) is **pinned in the README**, and the
+manually-deployed dev-key record is preserved under the `pre-m15-snapshot` tag. Three runs to
+live, each teaching something:
+
+1. **Run 1 failed honestly** — Astro 6 needs Node ≥ 22.12, the workflow pinned 20. One-line fix.
+2. **Run 2 deployed the 12-target record** (9 observations; a bundle downloaded from the live
+   site verifies offline under the pinned key) — **but the persist step lied**: `git rm` on the
+   orphan `state` checkout failed silently under `|| true`, main's surviving `.gitignore` masked
+   `verderer-data/` from `add -A`, and the step committed **main's source tree** as "state"
+   while echoing "persisted ledger at size 9". The runner's ledger died with the VM.
+3. **Reconstruction from the log's own published proofs** (`scratchpad/reconstruct.py`, method
+   worth keeping): the 9 bundles carry the exact base64 leaf bytes, so replaying them through
+   the audited `verderer-ledger` with a throwaway key rebuilds `entries.b64`/`hashes`/`tile/`
+   key-independently; the replayed root **matched the published signed root byte-for-byte**,
+   the real signed checkpoint rides along verbatim, and all 18 blobs (raw + WARC) re-entered
+   the store through its own content addressing, asserted against the attested hashes.
+   `verderer-verify log` → VALID under the pinned key, re-verified after a round-trip through
+   GitHub. No re-signing, no reset, no equivocation. The persist step is now assertive: loud
+   `git rm -rfq` (no silencing), `entries.b64` must be tracked and `key.json` absent **before**
+   claiming "persisted", size reported from the committed copy, `* -text` on the state branch.
+4. **Run 3 closed the loop**: `restored ledger at size 9` → `due 12: 3 observed, 6 unchanged
+   (byte-identical → deduped, no leaf), 0 skipped, 3 error(s) (DNS-dead watches, retried);
+   1 new diff` → state persisted at **size 13** → and `verderer-verify consistency` proves
+   size 13 **consistently extends** size 9 under the pinned key — no fork or rewrite across
+   the whole incident.
+
+**The record caught its first real change**: `ContentEdit [Medium]` on `fema-nri`
+(2026-07-20T15:09Z), classified, attested, and published by the unattended pipeline.
+
+**Standing rule from here: the cloud is the log operator.** The local `verderer-data` ledger is
+retired as a writer — a local `observe`/`run` that publishes would fork the live log. Local
+stays a dev sandbox. **M15's box stays unticked** until a *cron-fired* (not dispatched) run
+completes unattended — the milestone's own test — expected at the next 6-hour tick.
+
+---
+
 ## Rename cleanup — the live site said "Annals" · fixed + redeployed 2026-07-20
 
 The Druid → Annals → Verderer double rename (2026-07-15) missed the web templates: the live
