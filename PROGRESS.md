@@ -66,7 +66,35 @@ exactly why M13b waits rather than ships a synthetic OTS).
 
 ---
 
-## M15 bootstrap — the watchdog now runs itself in the cloud · 2026-07-20 (tick pending one cron-fired run)
+## M15 confirmed + M13b OTS stamp placed · 2026-07-21
+
+**M15 is done** — its acceptance test passed on its own. Since the 2026-07-20 bootstrap, the
+`schedule` trigger has fired the watch workflow unattended every ~6 h (first cron run
+2026-07-20T19:56Z; five+ green as of 2026-07-21T19:51Z). The live record self-updated and
+**grew across runs, 9 → 15 leaves**, most re-observations correctly deduping to no leaf; the
+state branch verifies `VALID 15` under the pinned key, and `verderer-verify consistency` proves
+**size 15 extends size 9 with no fork or rewrite** across the entire life of the log (bootstrap,
+the persist-bug reconstruction, and every cron run). ROADMAP M15 ticked.
+
+**M13b — phase 1 (the real stamp) placed.** OpenTimestamps needs a *Bitcoin-confirmed* proof,
+which can't be minted synchronously — so the honest move is to stamp now and upgrade after
+confirmation. The reference `ots` CLI is unusable on this Windows box (its `python-bitcoinlib`
+dependency eagerly loads OpenSSL and `find_library('ssl')` returns `None`), so the stamp was
+produced with the **pure-Python `opentimestamps` library** (no bitcoinlib, no libssl): SHA-256
+of the exact live size-15 checkpoint bytes → privacy nonce → submitted to **four independent
+public calendars** (alice/bob OpenTimestamps, Eternitywall, Catallaxy), all four accepted. The
+result is committed at `tests/fixtures/ots/` — `checkpoint-15` (the exact 196 attested bytes),
+`checkpoint-15.ots` (the pending proof), and a README. It re-parses, binds to the checkpoint's
+SHA-256, and carries 4 pending calendar attestations + **0 Bitcoin attestations** (the expected
+pending state). A per-dir `.gitattributes` marks the two data files `-text` so the repo's
+`* text=auto` can't EOL-corrupt the stamped bytes on a Windows checkout (the WARC lesson).
+**M13b stays open**: the verifier slice (an `ots` `anchors` entry + offline block-header
+verification in the Rust core, and a forged-proof-rejected test) lands next session, once
+`ots upgrade` fills in the confirmed `BitcoinBlockHeaderAttestation`.
+
+---
+
+## M15 bootstrap — the watchdog now runs itself in the cloud · 2026-07-20
 
 The owner minted a fresh instance key straight into the `VERDERER_SIGNING_KEY` secret (per
 `docs/deployment.md` — "whoever holds it IS the log operator"); the public key
