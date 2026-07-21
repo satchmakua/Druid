@@ -16,44 +16,44 @@
     },
     {
       "consecutive_failures": 0,
-      "last_run": 1784605553.8972626,
+      "last_run": 1784663511.1331165,
       "last_status": "unchanged",
-      "next_due": 1784650281.3649464,
+      "next_due": 1784705273.1182773,
       "target_id": "epa-drinking-water-mcl"
     },
     {
       "consecutive_failures": 0,
-      "last_run": 1784559995.6482842,
+      "last_run": 1784663511.3973129,
       "last_status": "unchanged",
-      "next_due": 1784645820.2445462,
+      "next_due": 1784749718.693863,
       "target_id": "epa-glyphosate"
     },
     {
       "consecutive_failures": 0,
-      "last_run": 1784605554.3096018,
+      "last_run": 1784663512.4383595,
       "last_status": "unchanged",
-      "next_due": 1784652251.9142845,
+      "next_due": 1784704233.6154633,
       "target_id": "epa-climate-indicators"
     },
     {
-      "consecutive_failures": 5,
-      "last_run": 1784643772.3751712,
+      "consecutive_failures": 6,
+      "last_run": 1784663513.7498865,
       "last_status": "error",
-      "next_due": 1784647372.3751712,
+      "next_due": 1784667113.7498865,
       "target_id": "epa-ejscreen"
     },
     {
-      "consecutive_failures": 5,
-      "last_run": 1784643784.689102,
+      "consecutive_failures": 6,
+      "last_run": 1784663521.4054668,
       "last_status": "error",
-      "next_due": 1784647384.689102,
+      "next_due": 1784667121.4054668,
       "target_id": "usgcrp"
     },
     {
-      "consecutive_failures": 5,
-      "last_run": 1784643851.3966413,
+      "consecutive_failures": 6,
+      "last_run": 1784663585.5519738,
       "last_status": "error",
-      "next_due": 1784647451.3966413,
+      "next_due": 1784667185.5519738,
       "target_id": "nca5"
     },
     {
@@ -65,9 +65,9 @@
     },
     {
       "consecutive_failures": 0,
-      "last_run": 1784560142.7117925,
+      "last_run": 1784663652.5046134,
       "last_status": "unchanged",
-      "next_due": 1784645955.0468566,
+      "next_due": 1784747842.042604,
       "target_id": "noaa-co2-trends"
     },
     {
@@ -78,10 +78,10 @@
       "target_id": "usda-climate-hubs"
     },
     {
-      "consecutive_failures": 0,
-      "last_run": 1784560143.9338703,
-      "last_status": "observed",
-      "next_due": 1784653636.8377228,
+      "consecutive_failures": 1,
+      "last_run": 1784663653.0017593,
+      "last_status": "error",
+      "next_due": 1784663953.0017593,
       "target_id": "fema-nri"
     }
   ]
