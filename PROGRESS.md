@@ -66,6 +66,53 @@ exactly why M13b waits rather than ships a synthetic OTS).
 
 ---
 
+## M13b — OpenTimestamps: the trust core is closed · confirmed 2026-07-21 — **ROADMAP COMPLETE**
+
+The last open milestone. A real Bitcoin-anchored OpenTimestamps proof over a real Verderer
+checkpoint, verifying **offline** — the maximally adversary-resistant "existed no later than"
+anchor, added without ever putting a synthetic anchor on the trust path.
+
+**The two-phase reality OTS forces, honored exactly.** Unlike RFC 3161 TSAs (instant), a
+faithful OTS proof needs a *Bitcoin-confirmed* `.ots` — hours of latency. So: yesterday the live
+size-15 checkpoint was stamped against four independent public calendars (pending); today, after
+the aggregation tx confirmed in **blocks 959058 & 959061**, the proof was upgraded and committed
+as a genuine fixture. The reference `ots` CLI is unusable here (its `python-bitcoinlib` eagerly
+loads OpenSSL, absent on this box), so both stamp and upgrade were done with the pure-Python
+`opentimestamps` library — every step cross-checked (the op chain replays to each block's real
+merkle root; the recomputed block hashes match the explorer).
+
+**The verifier (`rust/ledger-core/src/ots.rs`, ~260 lines, no bespoke crypto).** Parses the
+`.ots` detached-timestamp serialization (a recursive-descent walk over the `\xff`-fork /
+`\x00`-attestation grammar), applies the {append, prepend, sha256} op chain from the checkpoint's
+SHA-256 to each `BitcoinBlockHeaderAttestation`'s merkle root, and checks that against the
+**carried 80-byte header**: merkle-root field match + real proof-of-work (double-SHA-256 ≤
+target(nBits)), reporting the block time as the bound. Fully offline — the header travels in the
+bundle, so no Bitcoin node is ever contacted. Only the three ops a Bitcoin path uses are
+implemented; any other tag is rejected rather than risk mis-reading a hostile proof. Bounded
+against adversarial input (op budget + 4 KB message cap).
+
+**Honest bounds, per DESIGN §4.2 / ADR-0005.** What's proven offline: the proof commits *this*
+checkpoint, the ops land in the header's merkle root, and the header carries valid PoW. The one
+residual assumption — that the header is a *main-chain* block, not a privately-mined fork — is
+checkable by anyone in seconds against the block hash the verifier prints. So the discriminant
+mirrors the TSA model: a mis-binding proof or bad header is **tamper → reject**; a pending or
+header-less proof is **"present, not verified" → no bound claimed**.
+
+**Wired as a real feature, not just a test.** A distinct `ots` entry in the bundle `anchors`
+(`verify_bundle` dispatch), a `verderer-verify ots` subcommand, a `verderer anchor --ots`
+producer that refuses a proof not committing to the current checkpoint, and Python front-ends
+(`anchors.build_ots_anchor` / `verify_ots_offline`, `pipeline.store_ots_anchor`).
+
+**Live proof (all offline, committed fixtures).** A real proof bundle for the `epa-ghgrp`
+observation, carrying the OTS anchor, verifies with `verderer-verify bundle`:
+`VALID … 1 anchor(s) verified - existed no later than 2026-07-21T21:09:36Z` (Bitcoin block
+959058). Rejections proven: a forged proof (winning-path byte flip), a tampered header merkle
+root, a tampered nonce (isolating the **PoW** gate), and a wrong checkpoint. A header-less proof
+reports *unverified*, not invalid. **8 Rust + 7 Python tests**, `ruff`/`mypy`/`pytest` +
+`cargo fmt`/`clippy`/`test` all green. With this, **every ROADMAP milestone is complete.**
+
+---
+
 ## M15 confirmed + M13b OTS stamp placed · 2026-07-21
 
 **M15 is done** — its acceptance test passed on its own. Since the 2026-07-20 bootstrap, the
