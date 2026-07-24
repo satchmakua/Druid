@@ -1,0 +1,438 @@
+{
+  "schema": "verderer.record/v1",
+  "public_key": "5ba707a9c137b726d5494d73d9d946e581969cbc65f01dab5e3bcf83a52a24db",
+  "size": 27,
+  "targets": [
+    {
+      "id": "epa-climate-indicators",
+      "title": "EPA Climate Change Indicators",
+      "url": "https://www.epa.gov/climate-indicators",
+      "kind": "page",
+      "criteria": "[history][removed] Core climate reference; 404 at curation (2026-07-17) after prior alteration history - attesting absence, watching for reappearance.",
+      "observations": [
+        {
+          "id": "fcac7180ab73a3d53fcde4322b412464098f39143ac349ece7323edc79577f43",
+          "content_hash": "1220199b876d0191032a3361571d3ee1dcf9ff966d7e67f0d3dee13de3bc01fd6e75",
+          "fetched_at": "2026-07-20T14:51:49Z",
+          "http_status": 404,
+          "url": "https://www.epa.gov/climate-indicators",
+          "warc_record_hash": "1220d1025d4d8de00c8f17852c9f48ea805476f03de6b713eaabe994106f44f9136f",
+          "warc": "warc/d1025d4d8de00c8f17852c9f48ea805476f03de6b713eaabe994106f44f9136f.warc"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "epa-drinking-water-mcl",
+      "title": "EPA National Primary Drinking Water Regulations (MCL table)",
+      "url": "https://www.epa.gov/ground-water-and-drinking-water/national-primary-drinking-water-regulations",
+      "kind": "page",
+      "criteria": "[mandate][threshold][traffic] The legally enforceable Maximum Contaminant Levels - the canonical L2 numeric-threshold target (200 at curation).",
+      "observations": [
+        {
+          "id": "709af2276dbe9368a942644037d198445e5ede14a4434d0d981f429debac7bc2",
+          "content_hash": "122026edf13b1c7f669ffe60ca381fae0f6e81b4ef558eb103d83072c42257d33693",
+          "fetched_at": "2026-07-20T14:51:48Z",
+          "http_status": 200,
+          "url": "https://www.epa.gov/ground-water-and-drinking-water/national-primary-drinking-water-regulations",
+          "warc_record_hash": "1220505493d37dc93f84d582d6caa9b62bdf31537cd605f30de3011caddda9b52613",
+          "warc": "warc/505493d37dc93f84d582d6caa9b62bdf31537cd605f30de3011caddda9b52613.warc"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "epa-ejscreen",
+      "title": "EPA EJScreen environmental-justice screening tool",
+      "url": "https://ejscreen.epa.gov/mapper/",
+      "kind": "page",
+      "criteria": "[history][removed] EJ screening tool; DNS dead at curation (2026-07-17) after the documented 2025 takedown - reappearance watch.",
+      "observations": [],
+      "events": []
+    },
+    {
+      "id": "epa-ghgrp",
+      "title": "EPA Greenhouse Gas Reporting Program",
+      "url": "https://www.epa.gov/ghgreporting",
+      "kind": "page",
+      "criteria": "[mandate][traffic] Congressionally mandated reporting program (200 at curation).",
+      "observations": [
+        {
+          "id": "2b625fa4be6129b1f120dc03b66c0c4e81bec2fc4ce9ec822573c9efd988735f",
+          "content_hash": "12203a2e1f1febac7aa4343f5f57a70a8bcbb9355fe1dd401ab3503263eafd17346c",
+          "fetched_at": "2026-07-20T14:51:46Z",
+          "http_status": 200,
+          "url": "https://www.epa.gov/ghgreporting",
+          "warc_record_hash": "1220ef138f779c384c4b94fd8e19d88c7c21870b3c23616d0262abec8252bd1674c7",
+          "warc": "warc/ef138f779c384c4b94fd8e19d88c7c21870b3c23616d0262abec8252bd1674c7.warc"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "epa-ghgrp-data",
+      "title": "EPA GHGRP facility-level emissions (data download)",
+      "url": "https://www.epa.gov/system/files/other-files/2024-10/2023_data_summary_spreadsheets.zip",
+      "kind": "dataset",
+      "criteria": "[mandate][threshold] Mandated dataset; a silent schema edit or re-baselining is high-signal. A 404 is itself a Deletion signal.",
+      "observations": [
+        {
+          "id": "137b40bf969860fcf189059fcaee64d28c8e7fd6795606dd3e9b2f0cc2aa9760",
+          "content_hash": "1220895349c8008b7962dba68659c8187cec6b340d68be84ccb3f0e7fb6037bf8345",
+          "fetched_at": "2026-07-20T14:51:47Z",
+          "http_status": 200,
+          "url": "https://www.epa.gov/system/files/other-files/2024-10/2023_data_summary_spreadsheets.zip",
+          "warc_record_hash": "1220a9ad65bbfac879ecc741debe19fefe082c0e1002c9911c551c398a7bcde845eb",
+          "warc": "warc/a9ad65bbfac879ecc741debe19fefe082c0e1002c9911c551c398a7bcde845eb.warc"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "epa-glyphosate",
+      "title": "EPA glyphosate registration review",
+      "url": "https://www.epa.gov/ingredients-used-pesticide-products/glyphosate",
+      "kind": "page",
+      "criteria": "[threshold][history] Pesticide regulatory page under active litigation pressure; tolerance/threshold language is high-signal (200 at curation).",
+      "observations": [
+        {
+          "id": "46798fe6d21ec70672c10c73679e4e44fa5fe2b071ca40ef2c7d72f1ab33fe30",
+          "content_hash": "1220962d770fe59abc418e9fdf7c86591a4b88af47d419ec50bc84732974de188600",
+          "fetched_at": "2026-07-20T14:51:48Z",
+          "http_status": 200,
+          "url": "https://www.epa.gov/ingredients-used-pesticide-products/glyphosate",
+          "warc_record_hash": "12200e2316dc0dc04959f77f87554cad9dea88f91303be9f381b62c923345419c099",
+          "warc": "warc/0e2316dc0dc04959f77f87554cad9dea88f91303be9f381b62c923345419c099.warc"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "fema-nri",
+      "title": "FEMA National Risk Index",
+      "url": "https://hazards.fema.gov/nri/",
+      "kind": "page",
+      "criteria": "[threshold][traffic] Community hazard/climate risk ratings used in planning + funding decisions (200 at curation).",
+      "observations": [
+        {
+          "id": "d7e42c4cecfbf8f0d12b849bac70e9e668af18a19c96b99d5d83cf44265dde8a",
+          "content_hash": "1220b71af0b0460e65de6fed0883e6a7bcd4fe80555bb993c30d832570a7d60ba5a3",
+          "fetched_at": "2026-07-20T14:54:14Z",
+          "http_status": 403,
+          "url": "https://www.fema.gov/emergency-managers/practitioners/resilience-analysis-and-planning-tool",
+          "warc_record_hash": "12209b5214c667d904c57ca9523712600418a28c24b67577bff24e840f6340349a68",
+          "warc": "warc/9b5214c667d904c57ca9523712600418a28c24b67577bff24e840f6340349a68.warc"
+        },
+        {
+          "id": "77af77de143acdee1f89f80055a53dd03b0a6c4e5f46ecb9470b6f2470c4a739",
+          "content_hash": "1220f2ae2639eed1f7d9fc57318ae25a2b4f9ba050dd5f7b213fb2358717a5b8d9cb",
+          "fetched_at": "2026-07-20T15:09:05Z",
+          "http_status": 403,
+          "url": "https://www.fema.gov/emergency-managers/practitioners/resilience-analysis-and-planning-tool",
+          "warc_record_hash": "1220bfa1800f489d735477b88a9f62a867c5996db7ca68027d7c228ef1f717301107",
+          "warc": "warc/bfa1800f489d735477b88a9f62a867c5996db7ca68027d7c228ef1f717301107.warc"
+        },
+        {
+          "id": "0a88d0147207280595da201b4146d80892bdac47d2f3eafe91531524e433c8cf",
+          "content_hash": "1220c8c5868e30b8bf5b175ea81ca96a21d5a08a6179407843fe72f5cf950a64efa0",
+          "fetched_at": "2026-07-22T03:49:12Z",
+          "http_status": 403,
+          "url": "https://www.fema.gov/emergency-managers/practitioners/resilience-analysis-and-planning-tool",
+          "warc_record_hash": "1220f524e383d9afdba2e1641776753eccddd7961ec11c0782f584f840ceb791ad1f",
+          "warc": "warc/f524e383d9afdba2e1641776753eccddd7961ec11c0782f584f840ceb791ad1f.warc"
+        },
+        {
+          "id": "bb7c7e3802ef5503ad1cc792e79397b499149b6c4be8c73359c4d5c7582fffc2",
+          "content_hash": "122008f9b7e9153688232ac314652105cab7318c2ef2d3c6efb65ba3f5a777e4726f",
+          "fetched_at": "2026-07-23T08:47:47Z",
+          "http_status": 403,
+          "url": "https://www.fema.gov/emergency-managers/practitioners/resilience-analysis-and-planning-tool",
+          "warc_record_hash": "1220bbd3413b91e8a12533266c2993c3c71717eda3fca2165ee8f60dcdf80179a8ca",
+          "warc": "warc/bbd3413b91e8a12533266c2993c3c71717eda3fca2165ee8f60dcdf80179a8ca.warc"
+        },
+        {
+          "id": "ea985dca7682d8bd8c12177f98ce768ee14c13b1f4d2b540cb8ad89ebabf8483",
+          "content_hash": "122001aae121e104093cd9dda65d31d3e51283f0254a06ef9b43885224361e1ef804",
+          "fetched_at": "2026-07-24T14:16:04Z",
+          "http_status": 403,
+          "url": "https://www.fema.gov/emergency-managers/practitioners/resilience-analysis-and-planning-tool",
+          "warc_record_hash": "12209e5d8eb459014eea34ad8a7ae2d30b58f74ed03329fffce9cce398ed4de5bc24",
+          "warc": "warc/9e5d8eb459014eea34ad8a7ae2d30b58f74ed03329fffce9cce398ed4de5bc24.warc"
+        }
+      ],
+      "events": [
+        {
+          "id": "d38d5bd385b20d1a75201836ba4058c158a34387e85a707bdac2d7cb393e8af5",
+          "target_id": "fema-nri",
+          "diff_type": "ContentEdit",
+          "severity": "Medium",
+          "layer": "L0-normalize",
+          "detected_at": "2026-07-20T15:09:05Z",
+          "evidence": {
+            "note": "normalised content changed; no watched term moved"
+          },
+          "from_hash": "1220b71af0b0460e65de6fed0883e6a7bcd4fe80555bb993c30d832570a7d60ba5a3",
+          "to_hash": "1220f2ae2639eed1f7d9fc57318ae25a2b4f9ba050dd5f7b213fb2358717a5b8d9cb"
+        },
+        {
+          "id": "3a2637ffd04040c4e0bec263007cca3b3a93cb0f47965754e4f91c178a48ddfe",
+          "target_id": "fema-nri",
+          "diff_type": "ContentEdit",
+          "severity": "Medium",
+          "layer": "L0-normalize",
+          "detected_at": "2026-07-22T03:49:12Z",
+          "evidence": {
+            "note": "normalised content changed; no watched term moved"
+          },
+          "from_hash": "1220f2ae2639eed1f7d9fc57318ae25a2b4f9ba050dd5f7b213fb2358717a5b8d9cb",
+          "to_hash": "1220c8c5868e30b8bf5b175ea81ca96a21d5a08a6179407843fe72f5cf950a64efa0"
+        },
+        {
+          "id": "b5d78d3ac5f55afcd3f44750863ac09d741b08dfe483af999a65f6721c378106",
+          "target_id": "fema-nri",
+          "diff_type": "ContentEdit",
+          "severity": "Medium",
+          "layer": "L0-normalize",
+          "detected_at": "2026-07-23T08:47:47Z",
+          "evidence": {
+            "note": "normalised content changed; no watched term moved"
+          },
+          "from_hash": "1220c8c5868e30b8bf5b175ea81ca96a21d5a08a6179407843fe72f5cf950a64efa0",
+          "to_hash": "122008f9b7e9153688232ac314652105cab7318c2ef2d3c6efb65ba3f5a777e4726f"
+        },
+        {
+          "id": "2d6612191e198e0bbec4504743fc4c75436b8ecae01086c37d17da713c113e65",
+          "target_id": "fema-nri",
+          "diff_type": "ContentEdit",
+          "severity": "Medium",
+          "layer": "L0-normalize",
+          "detected_at": "2026-07-24T14:16:04Z",
+          "evidence": {
+            "note": "normalised content changed; no watched term moved"
+          },
+          "from_hash": "122008f9b7e9153688232ac314652105cab7318c2ef2d3c6efb65ba3f5a777e4726f",
+          "to_hash": "122001aae121e104093cd9dda65d31d3e51283f0254a06ef9b43885224361e1ef804"
+        }
+      ]
+    },
+    {
+      "id": "nca5",
+      "title": "Fifth National Climate Assessment (nca2023.globalchange.gov)",
+      "url": "https://nca2023.globalchange.gov/",
+      "kind": "page",
+      "criteria": "[mandate][removed][traffic] The NCA5 report itself; DNS dead at curation (2026-07-17) - attesting the assessment's continued absence.",
+      "observations": [],
+      "events": []
+    },
+    {
+      "id": "noaa-climate-gov",
+      "title": "NOAA Climate.gov",
+      "url": "https://www.climate.gov/",
+      "kind": "page",
+      "criteria": "[history][removed][traffic] NOAA's public climate portal; 403 at curation (2026-07-17) after its 2025 content-team dismissal - access-block watch.",
+      "observations": [
+        {
+          "id": "0b6a81ce3398ef0702cdc9c7a7e2a73dff2fb7473af3202d703c84f7d5c3521c",
+          "content_hash": "12200ea9d0af2b3c3318b8001f8949891eb4b98994aa723c6fe9a0f2d2a673453363",
+          "fetched_at": "2026-07-20T14:54:13Z",
+          "http_status": 403,
+          "url": "https://www.noaa.gov/climate",
+          "warc_record_hash": "1220aa302c74d0f73d1400315760eb1174df2ae9508ac684f8c8dada777a4961c53d",
+          "warc": "warc/aa302c74d0f73d1400315760eb1174df2ae9508ac684f8c8dada777a4961c53d.warc"
+        },
+        {
+          "id": "6776feb7818dc56e1cb372529f5b7b807366e931b38502e30fd5ba2810d76bd3",
+          "content_hash": "122085e8d985ad797896e70e4d0e3b6d714b494aa8e418b1cacf00d9cb410667d0e4",
+          "fetched_at": "2026-07-20T15:09:02Z",
+          "http_status": 403,
+          "url": "https://www.noaa.gov/climate",
+          "warc_record_hash": "12205a3bebca5e82d1002129c9331d63404171bae61f555e7e1d7d80d406bc96751e",
+          "warc": "warc/5a3bebca5e82d1002129c9331d63404171bae61f555e7e1d7d80d406bc96751e.warc"
+        },
+        {
+          "id": "73fad639336efc669fba2cd644d0e101c1dbc3e38ed5938fe3bcbcbf42bda937",
+          "content_hash": "122041170312d5cbd8a6bc16cd0127af19928000053a12a4d6e1549ebcc3d1c3727e",
+          "fetched_at": "2026-07-21T08:47:46Z",
+          "http_status": 403,
+          "url": "https://www.noaa.gov/climate",
+          "warc_record_hash": "12208e1931c6ca0133acbfe39d3f4967133af60b44bfb758e5e2bdd9ab386f66daa5",
+          "warc": "warc/8e1931c6ca0133acbfe39d3f4967133af60b44bfb758e5e2bdd9ab386f66daa5.warc"
+        },
+        {
+          "id": "064f6e32abcbc5cae70c8d266bf3a37b1dccc8453eb82509a7ff37a9a0df6002",
+          "content_hash": "1220dfd6f304cfe7b76d1928e27c751cfbebf9e6ecef04e653ae52fb886ffda82356",
+          "fetched_at": "2026-07-22T03:49:11Z",
+          "http_status": 403,
+          "url": "https://www.noaa.gov/climate",
+          "warc_record_hash": "1220db76160751e9501121d87956924331ae07dc5f6c657ea91e83232d7f7abd94d0",
+          "warc": "warc/db76160751e9501121d87956924331ae07dc5f6c657ea91e83232d7f7abd94d0.warc"
+        },
+        {
+          "id": "fa2fa92771c9f6ea184d1bf8d97a27e10c97fef7d8f797f44f6dac4d14fb8c2d",
+          "content_hash": "1220803615befb73e7094baf39df1c9bd5933188b61e8fdd1d8aad808d30695f023c",
+          "fetched_at": "2026-07-22T19:47:04Z",
+          "http_status": 403,
+          "url": "https://www.noaa.gov/climate",
+          "warc_record_hash": "1220c8239532ef19635da0dec57ab4f1f2ddee1074f71da507560ace7723ef44002d",
+          "warc": "warc/c8239532ef19635da0dec57ab4f1f2ddee1074f71da507560ace7723ef44002d.warc"
+        },
+        {
+          "id": "153f5e439c503c3be67aacc969a4c03a7086c74dca445a72fa616f8180e462e2",
+          "content_hash": "1220f581f641dca70bae87aa2579f7ac22011ac6a9a4af150ad9aee29e18280ae8c1",
+          "fetched_at": "2026-07-23T08:47:46Z",
+          "http_status": 403,
+          "url": "https://www.noaa.gov/climate",
+          "warc_record_hash": "12202f2e57b77e1e24aae1499d0d4e3b84bd4fdb0ab4901e0faf3229227c12eb673a",
+          "warc": "warc/2f2e57b77e1e24aae1499d0d4e3b84bd4fdb0ab4901e0faf3229227c12eb673a.warc"
+        },
+        {
+          "id": "f68160ed24a2d943161941e85e614c4ad822911ced7cf02c238d1678ea730f5a",
+          "content_hash": "1220e221b3da6ba7546110ec627ceba3925bfb0706997ad438044d101cf6f0c76218",
+          "fetched_at": "2026-07-24T03:47:15Z",
+          "http_status": 403,
+          "url": "https://www.noaa.gov/climate",
+          "warc_record_hash": "1220f52202130d619e794a50722877fbbee0e13669cba7816bc69239cb97043170ad",
+          "warc": "warc/f52202130d619e794a50722877fbbee0e13669cba7816bc69239cb97043170ad.warc"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "noaa-co2-trends",
+      "title": "NOAA GML CO2 trends (Mauna Loa) - data page",
+      "url": "https://gml.noaa.gov/ccgg/trends/data.html",
+      "kind": "page",
+      "criteria": "[traffic] The Keeling curve - the most-cited climate record on earth; this page carries the current monthly values inline (200 at curation). The raw CSV under /webdata/ is robots-disallowed, so the page IS the polite watch - the M9 layer refused the CSV, as it must.",
+      "observations": [
+        {
+          "id": "b5e2d43c63b8884fdb9b7e75d2d0cb66ada3dc588a57d256e2b9dfd69537afa7",
+          "content_hash": "12208d62bf32ae6cfe4287a84891b32da3404d7d2b5805150c42d7c947ac661ef4d2",
+          "fetched_at": "2026-07-20T14:54:13Z",
+          "http_status": 200,
+          "url": "https://gml.noaa.gov/ccgg/trends/data.html",
+          "warc_record_hash": "12205c97723d15ac563a9a15cff03994517fcd963d140b57c96713a7f7fff6ff5b2a",
+          "warc": "warc/5c97723d15ac563a9a15cff03994517fcd963d140b57c96713a7f7fff6ff5b2a.warc"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "usda-climate-hubs",
+      "title": "USDA Climate Hubs",
+      "url": "https://www.climatehubs.usda.gov/",
+      "kind": "page",
+      "criteria": "[history][traffic] Farmer-facing climate-risk resources - the category stripped in prior waves (200 at curation).",
+      "observations": [
+        {
+          "id": "ee03e90db67f7ca6fe2007cc410df5891e57121972211f37001a5a2ea4e71178",
+          "content_hash": "1220a14236b7ed490c47e9921e2774b163214d15823948b92b85f0e6d9ec2ad670f1",
+          "fetched_at": "2026-07-20T14:54:14Z",
+          "http_status": 200,
+          "url": "https://www.climatehubs.usda.gov/",
+          "warc_record_hash": "1220ba0afa0e8c9eeda7a0b6729feb8a21605121bb39fb0271834514c34831b25d9f",
+          "warc": "warc/ba0afa0e8c9eeda7a0b6729feb8a21605121bb39fb0271834514c34831b25d9f.warc"
+        },
+        {
+          "id": "1eb1c29054b6f6d73349ae8dab6ba72cd1e8fe35cbe5c2f624be739a62a85ae5",
+          "content_hash": "1220111eaedbcba53880362601f017fa6df0d5a4aa6345d6b4b04c70749f936bf099",
+          "fetched_at": "2026-07-20T15:09:03Z",
+          "http_status": 200,
+          "url": "https://www.climatehubs.usda.gov/",
+          "warc_record_hash": "1220a915a16c0e9d51118995d2dff5bde8b6002cb6c79372b7ef2d87e57bc6453ab7",
+          "warc": "warc/a915a16c0e9d51118995d2dff5bde8b6002cb6c79372b7ef2d87e57bc6453ab7.warc"
+        },
+        {
+          "id": "9fdd20b6217d999d851c7a5ab682692371c00cce15eccbb18c2ca9d4caab69fa",
+          "content_hash": "1220b8da9bbce4fef7163af2708da9ff7aaedd19d3145eac7c28db75366a9e4434c4",
+          "fetched_at": "2026-07-21T14:25:15Z",
+          "http_status": 200,
+          "url": "https://www.climatehubs.usda.gov/",
+          "warc_record_hash": "1220406384cac95f99c5283edd2b2a28d7f06ec81fe0698da003ab6f6b1a191ae3df",
+          "warc": "warc/406384cac95f99c5283edd2b2a28d7f06ec81fe0698da003ab6f6b1a191ae3df.warc"
+        },
+        {
+          "id": "0dfd7df2f41088ae5b31d1cc0d047f3f5269d871a9380468febcba3d1ab44e36",
+          "content_hash": "122074064492342a6e593e913c1e1648e80ae02c41c76fb82005e7784fd2ab0d2cd2",
+          "fetched_at": "2026-07-22T14:25:07Z",
+          "http_status": 200,
+          "url": "https://www.climatehubs.usda.gov/",
+          "warc_record_hash": "12204a497f688bdbe9931593b316eddc6715e6cbc2f12fe822e176622620d15b1449",
+          "warc": "warc/4a497f688bdbe9931593b316eddc6715e6cbc2f12fe822e176622620d15b1449.warc"
+        },
+        {
+          "id": "bc7544ab55cd562550a47028e119a1d7d21b06bd3a62720048d79d79c1b6fb3e",
+          "content_hash": "12204c513de454bfb3ffb1552c318ce1f2b7455e2614421e97225500a7828885115b",
+          "fetched_at": "2026-07-23T19:49:02Z",
+          "http_status": 200,
+          "url": "https://www.climatehubs.usda.gov/",
+          "warc_record_hash": "1220bb830ecf7b405601ab3cc9981a81a7b874b6c91eae9d326a54b5713c17692e0f",
+          "warc": "warc/bb830ecf7b405601ab3cc9981a81a7b874b6c91eae9d326a54b5713c17692e0f.warc"
+        }
+      ],
+      "events": []
+    },
+    {
+      "id": "usgcrp",
+      "title": "U.S. Global Change Research Program (globalchange.gov)",
+      "url": "https://www.globalchange.gov/",
+      "kind": "page",
+      "criteria": "[mandate][removed] Host of the congressionally mandated NCA; DNS dead at curation (2026-07-17) - the flagship deletion watch.",
+      "observations": [],
+      "events": []
+    }
+  ],
+  "events": [
+    {
+      "id": "2d6612191e198e0bbec4504743fc4c75436b8ecae01086c37d17da713c113e65",
+      "target_id": "fema-nri",
+      "diff_type": "ContentEdit",
+      "severity": "Medium",
+      "layer": "L0-normalize",
+      "detected_at": "2026-07-24T14:16:04Z",
+      "evidence": {
+        "note": "normalised content changed; no watched term moved"
+      },
+      "from_hash": "122008f9b7e9153688232ac314652105cab7318c2ef2d3c6efb65ba3f5a777e4726f",
+      "to_hash": "122001aae121e104093cd9dda65d31d3e51283f0254a06ef9b43885224361e1ef804"
+    },
+    {
+      "id": "b5d78d3ac5f55afcd3f44750863ac09d741b08dfe483af999a65f6721c378106",
+      "target_id": "fema-nri",
+      "diff_type": "ContentEdit",
+      "severity": "Medium",
+      "layer": "L0-normalize",
+      "detected_at": "2026-07-23T08:47:47Z",
+      "evidence": {
+        "note": "normalised content changed; no watched term moved"
+      },
+      "from_hash": "1220c8c5868e30b8bf5b175ea81ca96a21d5a08a6179407843fe72f5cf950a64efa0",
+      "to_hash": "122008f9b7e9153688232ac314652105cab7318c2ef2d3c6efb65ba3f5a777e4726f"
+    },
+    {
+      "id": "3a2637ffd04040c4e0bec263007cca3b3a93cb0f47965754e4f91c178a48ddfe",
+      "target_id": "fema-nri",
+      "diff_type": "ContentEdit",
+      "severity": "Medium",
+      "layer": "L0-normalize",
+      "detected_at": "2026-07-22T03:49:12Z",
+      "evidence": {
+        "note": "normalised content changed; no watched term moved"
+      },
+      "from_hash": "1220f2ae2639eed1f7d9fc57318ae25a2b4f9ba050dd5f7b213fb2358717a5b8d9cb",
+      "to_hash": "1220c8c5868e30b8bf5b175ea81ca96a21d5a08a6179407843fe72f5cf950a64efa0"
+    },
+    {
+      "id": "d38d5bd385b20d1a75201836ba4058c158a34387e85a707bdac2d7cb393e8af5",
+      "target_id": "fema-nri",
+      "diff_type": "ContentEdit",
+      "severity": "Medium",
+      "layer": "L0-normalize",
+      "detected_at": "2026-07-20T15:09:05Z",
+      "evidence": {
+        "note": "normalised content changed; no watched term moved"
+      },
+      "from_hash": "1220b71af0b0460e65de6fed0883e6a7bcd4fe80555bb993c30d832570a7d60ba5a3",
+      "to_hash": "1220f2ae2639eed1f7d9fc57318ae25a2b4f9ba050dd5f7b213fb2358717a5b8d9cb"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "verderer.consistency/v1",
+  "origin": "verderer.watchdog/m1-log",
+  "from": 25,
+  "to": 27,
+  "old_checkpoint": "verderer.watchdog/m1-log\n25\ncUJI3IHfU5tbwebZrZXOGkI4F99FpLTVlaS0gElu4G0=\n\n\u2014 verderer.watchdog/m1-log IbxwBZYxlc+cCoOYcf6egYtQeBXxbMKQF+9wQktLl2OSrGuWZPB9+ccBrZbmNFBieK/ncOg+rpeZLphfpRGd6TebfwU=\n",
+  "new_checkpoint": "verderer.watchdog/m1-log\n27\nSzn4MDGGlKBQnUUYInvfaaOyPInNn0PUIU8hu/f8kME=\n\n\u2014 verderer.watchdog/m1-log IbxwBbxe28YPQyBrWIjva0dXV+ZkfQkWzSIUc05RWiVKF4n44fhb35vnWO1DKApERLmXX5b6/ekp2Jayq2YpSC1VAgY=\n",
+  "proof": [
+    "f68160ed24a2d943161941e85e614c4ad822911ced7cf02c238d1678ea730f5a",
+    "ea985dca7682d8bd8c12177f98ce768ee14c13b1f4d2b540cb8ad89ebabf8483",
+    "2d6612191e198e0bbec4504743fc4c75436b8ecae01086c37d17da713c113e65",
+    "f4626a39b1ae51612995b3c497118c4a57887f0b2a2da1a3171f75143a3c8c00",
+    "6da2939496612f72e2b49f5b4348b49eb4dd1865cad6262a1cfbf8c6e8a24838"
+  ],
+  "pubkey_hex": "5ba707a9c137b726d5494d73d9d946e581969cbc65f01dab5e3bcf83a52a24db"
+}
